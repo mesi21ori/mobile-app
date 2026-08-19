@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../app_logo.dart';
 import '../auth.dart';
-import '../config.dart';
 import '../ethiopian_date.dart';
 import '../strings.dart';
 import '../theme.dart';
@@ -17,9 +16,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStateMixin {
   final userCtrl = TextEditingController(text: 'admin');
   final passCtrl = TextEditingController();
-  final urlCtrl = TextEditingController(text: AppConfig.defaultBaseUrl());
   bool busy = false;
-  bool showUrl = false;
   late final AnimationController _pulse;
 
   @override
@@ -33,7 +30,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     _pulse.dispose();
     userCtrl.dispose();
     passCtrl.dispose();
-    urlCtrl.dispose();
     super.dispose();
   }
 
@@ -128,23 +124,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                       prefixIcon: Icon(Icons.lock_outline_rounded),
                                     ),
                                   ),
-                                  TextButton(
-                                    onPressed: () => setState(() => showUrl = !showUrl),
-                                    child: const Text(S.apiUrl),
-                                  ),
-                                  AnimatedSize(
-                                    duration: const Duration(milliseconds: 280),
-                                    curve: Curves.easeOutCubic,
-                                    child: showUrl
-                                        ? Padding(
-                                            padding: const EdgeInsets.only(bottom: 8),
-                                            child: TextField(
-                                              controller: urlCtrl,
-                                              decoration: const InputDecoration(labelText: S.apiUrl),
-                                            ),
-                                          )
-                                        : const SizedBox.shrink(),
-                                  ),
+                                  const SizedBox(height: 16),
                                   FilledButton(
                                     onPressed: busy ? null : _submit,
                                     child: busy
@@ -183,7 +163,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   Future<void> _submit() async {
     setState(() => busy = true);
     try {
-      await context.read<AuthState>().login(userCtrl.text, passCtrl.text, apiUrl: urlCtrl.text);
+      await context.read<AuthState>().login(userCtrl.text, passCtrl.text);
     } catch (e) {
       if (mounted) showMsg(context, e.toString(), error: true);
     } finally {

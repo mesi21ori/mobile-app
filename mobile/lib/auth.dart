@@ -20,8 +20,7 @@ class AuthState extends ChangeNotifier {
   bool get isSuper => role == 'SUPER_ADMIN';
 
   Future<void> _load() async {
-    final url = await _storage.read(key: 'apiUrl');
-    if (url != null && url.isNotEmpty) api.baseUrl = url;
+    api.baseUrl = AppConfig.defaultBaseUrl();
     final token = await _storage.read(key: 'token');
     if (token != null) {
       api.token = token;
@@ -35,11 +34,8 @@ class AuthState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> login(String username, String password, {String? apiUrl}) async {
-    if (apiUrl != null && apiUrl.trim().isNotEmpty) {
-      api.baseUrl = apiUrl.trim();
-      await _storage.write(key: 'apiUrl', value: api.baseUrl);
-    }
+  Future<void> login(String username, String password) async {
+    api.baseUrl = AppConfig.defaultBaseUrl();
     final data = await api.post('/auth/login', {
       'username': username.trim(),
       'password': password,
