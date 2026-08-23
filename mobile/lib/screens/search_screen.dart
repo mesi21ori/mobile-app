@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../auth.dart';
@@ -17,9 +19,11 @@ class _SearchScreenState extends State<SearchScreen> {
   Map data = {};
   bool loading = false;
   String last = '';
+  Timer? _debounce;
 
   @override
   void dispose() {
+    _debounce?.cancel();
     ctrl.dispose();
     super.dispose();
   }
@@ -37,15 +41,23 @@ class _SearchScreenState extends State<SearchScreen> {
     setState(() => loading = true);
     try {
       final res = await context.read<AuthState>().api.get('/search?q=${Uri.encodeComponent(term)}');
+      if (!mounted) return;
       setState(() {
         data = res is Map ? Map<String, dynamic>.from(res) : {};
         last = term;
         loading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() => loading = false);
-      if (mounted) showMsg(context, e.toString(), error: true);
+      showMsg(context, e.toString(), error: true);
     }
+  }
+
+  void _onChanged(String v) {
+    setState(() {});
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () => _run(v));
   }
 
   @override
@@ -54,7 +66,13 @@ class _SearchScreenState extends State<SearchScreen> {
     final assets = (data['assets'] as List?) ?? [];
     final loans = (data['vestmentLoans'] as List?) ?? [];
     final groups = (data['groups'] as List?) ?? [];
-    final empty = last.length >= 2 && members.isEmpty && assets.isEmpty && loans.isEmpty && groups.isEmpty;
+    final events = (data['events'] as List?) ?? [];
+    final empty = last.length >= 2 &&
+        members.isEmpty &&
+        assets.isEmpty &&
+        loans.isEmpty &&
+        groups.isEmpty &&
+        events.isEmpty;
 
     return Scaffold(
       appBar: AppBar(title: const Text(S.search)),
@@ -65,7 +83,7 @@ class _SearchScreenState extends State<SearchScreen> {
             child: TextField(
               controller: ctrl,
               decoration: InputDecoration(
-                hintText: 'ተማሪ፣ ንብረት፣ ልብስ…',
+                hintText: 'ተማሪ፣ በዓል፣ ንብረት…',
                 prefixIcon: const Icon(Icons.search_rounded),
                 suffixIcon: ctrl.text.isEmpty
                     ? null
@@ -73,6 +91,7 @@ class _SearchScreenState extends State<SearchScreen> {
                         icon: const Icon(Icons.clear_rounded),
                         onPressed: () {
                           ctrl.clear();
+                          _debounce?.cancel();
                           setState(() {
                             data = {};
                             last = '';
@@ -81,7 +100,7 @@ class _SearchScreenState extends State<SearchScreen> {
                       ),
               ),
               onSubmitted: _run,
-              onChanged: (_) => setState(() {}),
+              onChanged: _onChanged,
             ),
           ),
           if (loading) const Expanded(child: LoadingView()),
@@ -99,6 +118,19 @@ class _SearchScreenState extends State<SearchScreen> {
                       ),
                     ),
                   if (empty) const EmptyBox('ውጤት አልተገኘም'),
+                  if (events.isNotEmpty) ...[
+                    SectionHeader(S.events),
+                    ...events.map((e) => SoftCard(
+                          child: ListTile(
+                            leading: const CircleAvatar(
+                              backgroundColor: AppTheme.blueSoft,
+                              child: Icon(Icons.event_rounded, color: AppTheme.seed),
+                            ),
+                            title: Text('${e['name'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                            subtitle: Text('መውጫ: ${EthDate.format(e['issueDate'])}'),
+                          ),
+                        )),
+                  ],
                   if (members.isNotEmpty) ...[
                     const SectionHeader('ተማሪዎች'),
                     ...members.map((m) {
@@ -146,7 +178,7 @@ class _SearchScreenState extends State<SearchScreen> {
                         )),
                   ],
                   if (groups.isNotEmpty) ...[
-                    const SectionHeader(S.classes),
+                    SectionHeader(S.classes),
                     ...groups.map((g) => SoftCard(
                           child: ListTile(
                             title: Text('${g['name'] ?? ''}', style: const TextStyle(fontWeight: FontWeight.w800)),
@@ -157,10 +189,6 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
             ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _run(ctrl.text),
-        child: const Icon(Icons.search_rounded),
       ),
     );
   }

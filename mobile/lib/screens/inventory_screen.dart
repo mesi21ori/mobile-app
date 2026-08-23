@@ -469,6 +469,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
       qtyCtrls[id] = TextEditingController(text: '1');
     }
     final searchCtrl = TextEditingController();
+    String memberLabel = '—';
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -502,21 +503,33 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     onChanged: (v) => setS(() => deptId = v),
                   ),
                   if (returnable)
-                    DropdownButtonFormField<int?>(
-                      value: memberId,
-                      decoration: const InputDecoration(labelText: 'የወሰደው አባል (ከተፈለገ)'),
-                      items: [
-                        const DropdownMenuItem<int?>(value: null, child: Text('—')),
-                        ...members
-                            .where((m) => q.isEmpty || '${m['fullName'] ?? ''}'.toLowerCase().contains(q))
-                            .map((m) {
-                              final id = jsonInt(m['id']);
-                              if (id == null) return null;
-                              return DropdownMenuItem<int?>(value: id, child: Text('${m['fullName'] ?? ''}'));
-                            })
-                            .whereType<DropdownMenuItem<int?>>(),
-                      ],
-                      onChanged: (v) => setS(() => memberId = v),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('የወሰደው አባል (ከተፈለገ)'),
+                      subtitle: Text(memberLabel, style: const TextStyle(fontWeight: FontWeight.w700)),
+                      trailing: const Icon(Icons.person_search_rounded, color: AppTheme.seed),
+                      onTap: () async {
+                        final picked = await pickMember(
+                          ctx,
+                          members: members,
+                          initial: memberId,
+                          title: 'የወሰደው አባል (ከተፈለገ)',
+                        );
+                        if (picked == null) return;
+                        setS(() {
+                          if (picked == -1) {
+                            memberId = null;
+                            memberLabel = '—';
+                            return;
+                          }
+                          memberId = picked;
+                          final m = members.cast<Map?>().firstWhere(
+                                (x) => jsonInt(x?['id']) == picked,
+                                orElse: () => null,
+                              );
+                          memberLabel = m?['fullName']?.toString() ?? '$picked';
+                        });
+                      },
                     ),
                   const SizedBox(height: 8),
                   const Text('ንብረቶች ይምረጡ', style: TextStyle(fontWeight: FontWeight.w800)),

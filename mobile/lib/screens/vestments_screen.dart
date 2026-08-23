@@ -168,7 +168,7 @@ class _VestmentsScreenState extends State<VestmentsScreen> {
         ],
       );
     }
-    return RefreshIndicator(
+    final body = RefreshIndicator(
       color: AppTheme.seed,
       onRefresh: _load,
       child: ListView(
@@ -311,10 +311,58 @@ class _VestmentsScreenState extends State<VestmentsScreen> {
                   ),
                 )),
           ],
-          const SizedBox(height: 24),
+          const SizedBox(height: 88),
         ],
       ),
     );
+    if (section == VestmentsSection.classes && auth.isClassLeader && classes.isNotEmpty) {
+      return Stack(
+        children: [
+          body,
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: FloatingActionButton.extended(
+              onPressed: () => _addStudentToGroup(classes.first),
+              icon: const Icon(Icons.person_add_alt),
+              label: const Text(S.addStudent),
+            ),
+          ),
+        ],
+      );
+    }
+    return body;
+  }
+
+  Future<void> _addStudentToGroup(Map group) async {
+    final name = TextEditingController();
+    final phone = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text(S.addStudent),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: name, decoration: const InputDecoration(labelText: 'ሙሉ ስም')),
+            const SizedBox(height: 8),
+            TextField(controller: phone, decoration: const InputDecoration(labelText: 'ስልክ')),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text(S.cancel)),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text(S.save)),
+        ],
+      ),
+    );
+    if (ok == true && name.text.trim().isNotEmpty) {
+      await context.read<AuthState>().api.post('/members', {
+        'fullName': name.text.trim(),
+        'phoneNumber': phone.text.trim(),
+        'groupId': group['id'],
+      });
+      _load();
+    }
   }
 
   Future<void> _addClass() async {

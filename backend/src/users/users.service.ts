@@ -58,8 +58,19 @@ export class UsersService {
     if (actorRole !== Role.SUPER_ADMIN) {
       throw new BadRequestException('ተጠቃሚ ማስተካከል የዋና አስተዳዳሪ ብቻ ነው');
     }
-    const data: any = { ...dto };
-    delete data.password;
+    const data: Record<string, unknown> = {};
+    if (dto.fullName !== undefined) data.fullName = dto.fullName;
+    if (dto.role !== undefined) data.role = dto.role;
+    if (dto.isActive !== undefined) data.isActive = dto.isActive;
+    if (dto.groupId !== undefined) data.groupId = dto.groupId;
+    if (dto.username !== undefined) {
+      const username = dto.username.trim();
+      const taken = await this.prisma.user.findFirst({
+        where: { username, NOT: { id } },
+      });
+      if (taken) throw new BadRequestException('የተጠቃሚ ስም ተይዟል');
+      data.username = username;
+    }
     if (dto.password) {
       data.passwordHash = await bcrypt.hash(dto.password, 10);
     }

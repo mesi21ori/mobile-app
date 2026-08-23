@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'api.dart';
+import 'strings.dart';
 import 'theme.dart';
 
 void showMsg(BuildContext context, String text, {bool error = false}) {
@@ -208,4 +210,70 @@ class LoadingView extends StatelessWidget {
       ),
     );
   }
+}
+
+Future<int?> pickMember(
+  BuildContext context, {
+  required List members,
+  int? initial,
+  String title = 'አባል ይምረጡ',
+}) {
+  final search = TextEditingController();
+  return showDialog<int?>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setS) {
+        final q = search.text.trim().toLowerCase();
+        final filtered = members.where((m) {
+          if (q.isEmpty) return true;
+          final name = '${m['fullName'] ?? ''}'.toLowerCase();
+          final phone = '${m['phoneNumber'] ?? ''}'.toLowerCase();
+          return name.contains(q) || phone.contains(q);
+        }).toList();
+        return AlertDialog(
+          title: Text(title),
+          content: SizedBox(
+            width: 340,
+            height: 420,
+            child: Column(
+              children: [
+                TextField(
+                  controller: search,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: S.search,
+                    prefixIcon: Icon(Icons.search_rounded),
+                  ),
+                  onChanged: (_) => setS(() {}),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: ListView(
+                    children: [
+                      ListTile(
+                        title: const Text('—'),
+                        selected: initial == null,
+                        onTap: () => Navigator.pop(ctx, -1),
+                      ),
+                      ...filtered.map((m) {
+                        final id = jsonInt(m['id']);
+                        return ListTile(
+                          title: Text('${m['fullName'] ?? ''}'),
+                          subtitle: m['phoneNumber'] != null && '${m['phoneNumber']}'.isNotEmpty
+                              ? Text('${m['phoneNumber']}')
+                              : null,
+                          selected: id == initial,
+                          onTap: () => Navigator.pop(ctx, id),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
 }

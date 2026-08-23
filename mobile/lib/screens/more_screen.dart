@@ -222,27 +222,50 @@ class _MoreScreenState extends State<MoreScreen> {
 
   Future<void> _editUser(Map u) async {
     final name = TextEditingController(text: u['fullName']?.toString() ?? '');
+    final username = TextEditingController(text: u['username']?.toString() ?? '');
+    final password = TextEditingController();
+    bool showPassword = false;
     String role = '${u['role'] ?? 'USER'}';
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setS) => AlertDialog(
           title: const Text(S.edit),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: name, decoration: const InputDecoration(labelText: 'ሙሉ ስም')),
-              DropdownButtonFormField<String>(
-                value: role,
-                items: const [
-                  DropdownMenuItem(value: 'SUPER_ADMIN', child: Text(S.superAdmin)),
-                  DropdownMenuItem(value: 'ADMIN', child: Text(S.admin)),
-                  DropdownMenuItem(value: 'CLASS_LEADER', child: Text(S.classLeader)),
-                  DropdownMenuItem(value: 'USER', child: Text(S.user)),
-                ],
-                onChanged: (v) => setS(() => role = v!),
-              ),
-            ],
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: name, decoration: const InputDecoration(labelText: 'ሙሉ ስም')),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: username,
+                  decoration: const InputDecoration(labelText: 'የተጠቃሚ ስም'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: password,
+                  obscureText: !showPassword,
+                  decoration: InputDecoration(
+                    labelText: 'አዲስ የይለፍ ቃል (ከተፈለገ)',
+                    suffixIcon: IconButton(
+                      icon: Icon(showPassword ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+                      onPressed: () => setS(() => showPassword = !showPassword),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: role,
+                  items: const [
+                    DropdownMenuItem(value: 'SUPER_ADMIN', child: Text(S.superAdmin)),
+                    DropdownMenuItem(value: 'ADMIN', child: Text(S.admin)),
+                    DropdownMenuItem(value: 'CLASS_LEADER', child: Text(S.classLeader)),
+                    DropdownMenuItem(value: 'USER', child: Text(S.user)),
+                  ],
+                  onChanged: (v) => setS(() => role = v!),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text(S.cancel)),
@@ -252,11 +275,22 @@ class _MoreScreenState extends State<MoreScreen> {
       ),
     );
     if (ok != true) return;
+    if (username.text.trim().isEmpty) {
+      showMsg(context, 'የተጠቃሚ ስም ያስፈልጋል', error: true);
+      return;
+    }
+    if (password.text.isNotEmpty && password.text.length < 6) {
+      showMsg(context, 'የይለፍ ቃል ቢያንስ 6 ቁምፊ', error: true);
+      return;
+    }
     try {
-      await context.read<AuthState>().api.patch('/users/${jsonInt(u['id'])}', {
+      final body = <String, dynamic>{
         'fullName': name.text.trim(),
+        'username': username.text.trim(),
         'role': role,
-      });
+      };
+      if (password.text.isNotEmpty) body['password'] = password.text;
+      await context.read<AuthState>().api.patch('/users/${jsonInt(u['id'])}', body);
       _load();
     } catch (e) {
       if (mounted) showMsg(context, e.toString(), error: true);

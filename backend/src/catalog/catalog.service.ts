@@ -347,7 +347,9 @@ export class CatalogService {
 
   async search(q: string, actor?: { role: Role; groupId?: number | null }) {
     const term = q.trim();
-    if (term.length < 2) return { members: [], assets: [], vestmentLoans: [], groups: [] };
+    if (term.length < 2) {
+      return { members: [], assets: [], vestmentLoans: [], groups: [], events: [] };
+    }
 
     const memberWhere: any = {
       fullName: { contains: term, mode: 'insensitive' },
@@ -356,7 +358,9 @@ export class CatalogService {
       memberWhere.groupMembers = { some: { groupId: actor.groupId } };
     }
 
-    const [members, assets, vestmentLoans, groups] = await Promise.all([
+    const eventWhere: any = { name: { contains: term, mode: 'insensitive' } };
+
+    const [members, assets, vestmentLoans, groups, events] = await Promise.all([
       this.prisma.member.findMany({
         where: memberWhere,
         take: 30,
@@ -374,7 +378,10 @@ export class CatalogService {
         ? Promise.resolve([])
         : this.prisma.vestmentLoan.findMany({
             where: {
-              member: { fullName: { contains: term, mode: 'insensitive' } },
+              OR: [
+                { member: { fullName: { contains: term, mode: 'insensitive' } } },
+                { event: { name: { contains: term, mode: 'insensitive' } } },
+              ],
             },
             take: 30,
             include: { member: true, vestment: true, event: true, group: true },
@@ -390,9 +397,14 @@ export class CatalogService {
             take: 10,
             orderBy: { name: 'asc' },
           }),
+      this.prisma.event.findMany({
+        where: eventWhere,
+        take: 15,
+        orderBy: { issueDate: 'desc' },
+      }),
     ]);
 
-    return { members, assets, vestmentLoans, groups };
+    return { members, assets, vestmentLoans, groups, events };
   }
 
   async setSetting(key: string, value: string) {
