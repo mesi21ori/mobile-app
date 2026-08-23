@@ -333,10 +333,10 @@ class _ClassLeaderHomeState extends State<_ClassLeaderHome> {
           ),
           Padding(
             padding: const EdgeInsets.only(top: 12),
-            child: FilledButton.icon(
+            child: OutlinedButton.icon(
               onPressed: () => widget.onOpen('v-classes'),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('መደብ ፍጠር / መደቦች'),
+              icon: const Icon(Icons.groups_rounded),
+              label: const Text('መደቦች ይመልከቱ'),
             ),
           ),
         ],

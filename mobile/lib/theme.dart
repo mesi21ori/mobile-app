@@ -82,10 +82,13 @@ class AppTheme {
         labelStyle: GoogleFonts.notoSansEthiopic(color: ink, fontWeight: FontWeight.w600),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
-      floatingActionButtonTheme: const FloatingActionButtonThemeData(
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: seed,
         foregroundColor: Colors.white,
         elevation: 4,
+        extendedPadding: const EdgeInsets.symmetric(horizontal: 20),
+        extendedTextStyle: GoogleFonts.notoSansEthiopic(fontWeight: FontWeight.w700, fontSize: 15),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,

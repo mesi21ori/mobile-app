@@ -42,7 +42,7 @@ class _AuditScreenState extends State<AuditScreen> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthState>();
     if (loading) return const LoadingView();
-    return RefreshIndicator(
+    final body = RefreshIndicator(
       color: AppTheme.seed,
       onRefresh: _load,
       child: ListView(
@@ -54,18 +54,6 @@ class _AuditScreenState extends State<AuditScreen> {
               style: const TextStyle(color: AppTheme.muted, fontWeight: FontWeight.w600),
             ),
           ),
-          if (auth.isAdmin)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-              child: FilledButton.icon(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => AuditCreatePage(departments: departments)),
-                ).then((_) => _load()),
-                icon: const Icon(Icons.fact_check_rounded),
-                label: const Text('ኦዲት ጀምር'),
-              ),
-            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: ReportDoc.button(_exportAudits),
@@ -104,8 +92,20 @@ class _AuditScreenState extends State<AuditScreen> {
               ),
             );
           }),
+          if (auth.isAdmin) createFabScrollPad else const SizedBox(height: 24),
         ],
       ),
+    );
+    return CreateFabLayout(
+      onCreate: auth.isAdmin
+          ? () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => AuditCreatePage(departments: departments)),
+              ).then((_) => _load())
+          : null,
+      label: 'ኦዲት ጀምር',
+      icon: Icons.fact_check_rounded,
+      body: body,
     );
   }
 

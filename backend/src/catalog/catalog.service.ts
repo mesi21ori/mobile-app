@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { assertEthPhone } from '../phone.util';
+import { assertEthPhone, ethPhoneLookupValues } from '../phone.util';
 import {
   AddGroupMembersDto,
   DepartmentDto,
@@ -28,6 +28,17 @@ export class CatalogService {
     if (actor.role !== Role.CLASS_LEADER) return;
     const link = await this.prisma.groupMember.findFirst({ where: { memberId } });
     if (!link) throw new BadRequestException('ይህ ተማሪ በምድብ ውስጥ የለም');
+  }
+
+  private async assertUniquePhone(phone: string, excludeMemberId?: number) {
+    const values = ethPhoneLookupValues(phone);
+    const existing = await this.prisma.member.findFirst({
+      where: {
+        phoneNumber: { in: values },
+        ...(excludeMemberId != null ? { NOT: { id: excludeMemberId } } : {}),
+      },
+    });
+    if (existing) throw new BadRequestException('ይህ ስልክ ቀድሞ ተመዝግቧል');
   }
 
   departments() {
@@ -75,7 +86,8 @@ export class CatalogService {
     if (actor?.role === Role.CLASS_LEADER) {
       if (!groupId) throw new BadRequestException('መደብ ይምረጡ');
     }
-    const phoneNumber = assertEthPhone(dto.phoneNumber, true);
+    const phoneNumber = assertEthPhone(dto.phoneNumber, true)!;
+    await this.assertUniquePhone(phoneNumber);
     const member = await this.prisma.member.create({
       data: {
         fullName: dto.fullName,
@@ -101,7 +113,8 @@ export class CatalogService {
     const member = await this.prisma.member.findUnique({ where: { id } });
     if (!member) throw new BadRequestException('አባሉ አልተገኘም');
     const phoneNumber =
-      dto.phoneNumber !== undefined ? assertEthPhone(dto.phoneNumber, false) ?? null : undefined;
+      dto.phoneNumber !== undefined ? assertEthPhone(dto.phoneNumber, true) : undefined;
+    if (phoneNumber) await this.assertUniquePhone(phoneNumber, id);
     return this.prisma.member.update({
       where: { id },
       data: {
@@ -172,9 +185,11 @@ export class CatalogService {
   }
 
   createEvent(dto: EventDto) {
+    const name = dto.name?.trim() ?? '';
+    if (!name) throw new BadRequestException('የበዓል ስም ያስፈልጋል');
     return this.prisma.event.create({
       data: {
-        name: dto.name.trim(),
+        name,
         issueDate: new Date(dto.issueDate),
         dueDate: new Date(dto.dueDate),
       },
@@ -276,8 +291,10 @@ export class CatalogService {
   }
 
   async createGroup(dto: GroupDto, actor?: { id: number; role: Role; groupId?: number | null }) {
+    const name = dto.name?.trim() ?? '';
+    if (!name) throw new BadRequestException('የምድብ ስም ያስፈልጋል');
     const group = await this.prisma.group.create({
-      data: { name: dto.name.trim() },
+      data: { name },
       include: { members: { include: { member: true } } },
     });
     // Keep a default groupId for class leaders who had none (optional convenience).

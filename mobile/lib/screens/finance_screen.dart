@@ -43,13 +43,56 @@ class _FinanceScreenState extends State<FinanceScreen> {
     });
   }
 
+  void _onCreateFinance() {
+    if (widget.typeFilter == 'INCOME') {
+      _add('INCOME');
+      return;
+    }
+    if (widget.typeFilter == 'EXPENSE') {
+      _add('EXPENSE');
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.south_west_rounded, color: AppTheme.seed),
+              title: Text(S.income),
+              onTap: () {
+                Navigator.pop(ctx);
+                _add('INCOME');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.north_east_rounded, color: AppTheme.muted),
+              title: Text(S.expense),
+              onTap: () {
+                Navigator.pop(ctx);
+                _add('EXPENSE');
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final superAdmin = context.watch<AuthState>().isSuper;
     if (loading) return const LoadingView();
     final opening = summary['openingBalance'] ?? 0;
     final locked = summary['openingBalanceLocked'] == true;
-    return RefreshIndicator(
+
+    String fabLabel = S.add;
+    if (widget.typeFilter == 'INCOME') fabLabel = S.income;
+    if (widget.typeFilter == 'EXPENSE') fabLabel = S.expense;
+
+    final body = RefreshIndicator(
       color: AppTheme.seed,
       onRefresh: _load,
       child: ListView(
@@ -101,21 +144,6 @@ class _FinanceScreenState extends State<FinanceScreen> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: ReportDoc.button(_exportFinance),
           ),
-          if (superAdmin)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  if (widget.typeFilter != 'EXPENSE')
-                    Expanded(child: FilledButton(onPressed: () => _add('INCOME'), child: const Text(S.income))),
-                  if (widget.typeFilter == null) const SizedBox(width: 8),
-                  if (widget.typeFilter != 'INCOME')
-                    Expanded(
-                      child: OutlinedButton(onPressed: () => _add('EXPENSE'), child: const Text(S.expense)),
-                    ),
-                ],
-              ),
-            ),
           SectionHeader('ዝርዝር'),
           ...rows.where((r) => widget.typeFilter == null || r['type'] == widget.typeFilter).toList().asMap().entries.map((entry) {
             final r = entry.value;
@@ -141,8 +169,16 @@ class _FinanceScreenState extends State<FinanceScreen> {
               ),
             );
           }),
+          if (superAdmin) createFabScrollPad else const SizedBox(height: 24),
         ],
       ),
+    );
+
+    return CreateFabLayout(
+      onCreate: superAdmin ? _onCreateFinance : null,
+      label: fabLabel,
+      icon: widget.typeFilter == 'EXPENSE' ? Icons.north_east_rounded : Icons.add_rounded,
+      body: body,
     );
   }
 

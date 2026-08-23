@@ -179,15 +179,6 @@ class _VestmentsScreenState extends State<VestmentsScreen> {
               child: ReportDoc.button(_exportClothes),
             ),
           if (section == VestmentsSection.classes) ...[
-            if (canAddClass)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: FilledButton.icon(
-                  onPressed: _addClass,
-                  icon: const Icon(Icons.add_rounded),
-                  label: Text(auth.isClassLeader ? 'መደብ ፍጠር' : S.addClass),
-                ),
-              ),
             const SectionHeader(S.classes),
             if (classes.isEmpty)
               EmptyBox(auth.isClassLeader ? 'መጀመሪያ መደብ ይፍጠሩ ወይም ከዝርዝሩ ይምረጡ' : 'መጀመሪያ ምድብ ይፍጠሩ፤ ከዚያ አባላትን ያክሉ'),
@@ -234,15 +225,6 @@ class _VestmentsScreenState extends State<VestmentsScreen> {
             }),
           ],
           if (section == VestmentsSection.events) ...[
-            if (auth.canCreateEvent)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: FilledButton.icon(
-                  onPressed: _addEvent,
-                  icon: const Icon(Icons.event_rounded),
-                  label: const Text('በዓል ፍጠር'),
-                ),
-              ),
             SectionHeader(S.events),
             if (events.isEmpty)
               EmptyBox(
@@ -283,10 +265,7 @@ class _VestmentsScreenState extends State<VestmentsScreen> {
                 )),
           ],
           if (section == VestmentsSection.clothes) ...[
-            SectionHeader(
-              S.vestments,
-              action: admin ? TextButton.icon(onPressed: _addVestment, icon: const Icon(Icons.add_rounded), label: const Text(S.add)) : null,
-            ),
+            const SectionHeader(S.vestments),
             if (vestments.isEmpty) const EmptyBox('ልብስ ይመዝግቡ'),
             ...vestments.map((v) => SoftCard(
                   child: ListTile(
@@ -311,11 +290,36 @@ class _VestmentsScreenState extends State<VestmentsScreen> {
                   ),
                 )),
           ],
-          const SizedBox(height: 24),
+          if (canAddClass || (section == VestmentsSection.events && auth.canCreateEvent) || (section == VestmentsSection.clothes && admin))
+            createFabScrollPad
+          else
+            const SizedBox(height: 24),
         ],
       ),
     );
-    return body;
+
+    VoidCallback? onCreate;
+    String createLabel = S.add;
+    IconData createIcon = Icons.add_rounded;
+    if (section == VestmentsSection.classes && canAddClass) {
+      onCreate = _addClass;
+      createLabel = auth.isClassLeader ? 'መደብ ፍጠር' : S.addClass;
+    } else if (section == VestmentsSection.events && auth.canCreateEvent) {
+      onCreate = _addEvent;
+      createLabel = 'በዓል ፍጠር';
+      createIcon = Icons.event_rounded;
+    } else if (section == VestmentsSection.clothes && admin) {
+      onCreate = _addVestment;
+      createLabel = S.add;
+      createIcon = Icons.checkroom_rounded;
+    }
+
+    return CreateFabLayout(
+      onCreate: onCreate,
+      label: createLabel,
+      icon: createIcon,
+      body: body,
+    );
   }
 
   Future<void> _addClass() async {
@@ -391,12 +395,18 @@ class _VestmentsScreenState extends State<VestmentsScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
+        builder: (ctx, setS) {
+          final canSave = name.text.trim().isNotEmpty;
+          return AlertDialog(
           title: const Text('በዓል ፍጠር'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: name, decoration: const InputDecoration(labelText: 'የበዓል ስም')),
+              TextField(
+                controller: name,
+                decoration: const InputDecoration(labelText: 'የበዓል ስም'),
+                onChanged: (_) => setS(() {}),
+              ),
               ListTile(
                 leading: const Icon(Icons.calendar_month_rounded, color: AppTheme.seed),
                 title: Text('መውጫ: ${EthDate.fromGregorian(issue).label}'),
@@ -417,32 +427,47 @@ class _VestmentsScreenState extends State<VestmentsScreen> {
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text(S.cancel)),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text(S.save)),
+            FilledButton(
+              onPressed: canSave ? () => Navigator.pop(ctx, true) : null,
+              child: const Text(S.save),
+            ),
           ],
-        ),
+        );
+        },
       ),
     );
-    if (ok == true) {
-      await context.read<AuthState>().api.post('/events', {
-        'name': name.text,
-        'issueDate': issue.toIso8601String(),
-        'dueDate': due.toIso8601String(),
-      });
-      _load();
+    if (ok != true || name.text.trim().isEmpty) {
+      if (ok == true && mounted) showMsg(context, 'ስም ያስፈልጋል', error: true);
+      return;
     }
+    await context.read<AuthState>().api.post('/events', {
+      'name': name.text.trim(),
+      'issueDate': issue.toIso8601String(),
+      'dueDate': due.toIso8601String(),
+    });
+    _load();
   }
 
   Future<void> _editClass(Map g) async {
     final name = TextEditingController(text: g['name']?.toString() ?? '');
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text(S.edit),
-        content: TextField(controller: name, decoration: const InputDecoration(labelText: 'የምድብ ስም')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text(S.cancel)),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text(S.save)),
-        ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          title: const Text(S.edit),
+          content: TextField(
+            controller: name,
+            decoration: const InputDecoration(labelText: 'የምድብ ስም'),
+            onChanged: (_) => setS(() {}),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text(S.cancel)),
+            FilledButton(
+              onPressed: name.text.trim().isEmpty ? null : () => Navigator.pop(ctx, true),
+              child: const Text(S.save),
+            ),
+          ],
+        ),
       ),
     );
     if (ok == true && name.text.trim().isNotEmpty) {
@@ -688,11 +713,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
     return Scaffold(
       appBar: AppBar(title: Text(group?['name'] ?? S.classes)),
       floatingActionButton: canManageClass
-          ? FloatingActionButton.extended(
-              onPressed: _addMember,
-              icon: const Icon(Icons.person_add_alt),
-              label: const Text(S.add),
-            )
+          ? CreateFab(onPressed: _addMember, icon: Icons.person_add_alt, label: S.addStudent)
           : null,
       body: loading
           ? const LoadingView()
@@ -800,9 +821,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setS) {
-          final phoneText = phone.text.trim();
-          final phoneOk = phoneText.isEmpty || EthPhone.isValid(phoneText);
-          final canSave = name.text.trim().isNotEmpty && phoneOk;
+          final canSave = name.text.trim().isNotEmpty && EthPhone.isValid(phone.text);
           return AlertDialog(
             title: const Text(S.edit),
             content: Column(
@@ -839,7 +858,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
       if (mounted) showMsg(context, 'ስም ያስፈልጋል', error: true);
       return;
     }
-    final phoneErr = EthPhone.validate(phone.text, required: false);
+    final phoneErr = EthPhone.validate(phone.text);
     if (phoneErr != null) {
       if (mounted) showMsg(context, phoneErr, error: true);
       return;
@@ -1017,12 +1036,10 @@ class _EventIssuePageState extends State<EventIssuePage> {
       appBar: AppBar(title: Text(widget.event['name'] ?? '')),
       floatingActionButton: classMembers.isEmpty
           ? null
-          : FloatingActionButton.extended(
+          : CreateFab(
               onPressed: saving ? null : _saveParticipants,
-              icon: saving
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.how_to_reg_rounded),
-              label: const Text(S.registerParticipants),
+              icon: Icons.how_to_reg_rounded,
+              label: S.registerParticipants,
             ),
       body: ListView(
         children: [
@@ -1156,10 +1173,10 @@ class ClassIssuePage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: Text(group['name'] ?? '')),
       floatingActionButton: canManageVestments && participants.isNotEmpty
-          ? FloatingActionButton.extended(
+          ? CreateFab(
               onPressed: () => _issue(context, bulk: true),
-              icon: const Icon(Icons.groups_3_rounded),
-              label: const Text(S.bulkIssue),
+              icon: Icons.groups_3_rounded,
+              label: S.bulkIssue,
             )
           : null,
       body: participants.isEmpty
@@ -1250,11 +1267,7 @@ class _MemberLoansPageState extends State<MemberLoansPage> {
     return Scaffold(
       appBar: AppBar(title: Text(widget.member['fullName'] ?? '')),
       floatingActionButton: canManageVestments
-          ? FloatingActionButton.extended(
-              onPressed: _issueOne,
-              label: const Text(S.issue),
-              icon: const Icon(Icons.checkroom),
-            )
+          ? CreateFab(onPressed: _issueOne, label: S.issue, icon: Icons.checkroom)
           : null,
       body: loading
           ? const LoadingView()

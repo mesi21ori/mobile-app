@@ -181,6 +181,71 @@ class SectionHeader extends StatelessWidget {
   }
 }
 
+/// Standard bottom-right extended create button used across the app.
+class CreateFab extends StatelessWidget {
+  const CreateFab({
+    super.key,
+    required this.onPressed,
+    required this.label,
+    this.icon = Icons.add_rounded,
+    this.heroTag,
+  });
+
+  final VoidCallback? onPressed;
+  final String label;
+  final IconData icon;
+  final Object? heroTag;
+
+  @override
+  Widget build(BuildContext context) {
+    return FloatingActionButton.extended(
+      heroTag: heroTag,
+      onPressed: onPressed,
+      elevation: 4,
+      backgroundColor: AppTheme.seed,
+      foregroundColor: Colors.white,
+      icon: Icon(icon),
+      label: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+    );
+  }
+}
+
+/// Wraps scrollable content with the standard create FAB at bottom-right.
+class CreateFabLayout extends StatelessWidget {
+  const CreateFabLayout({
+    super.key,
+    required this.body,
+    this.onCreate,
+    this.label = S.add,
+    this.icon = Icons.add_rounded,
+    this.heroTag,
+  });
+
+  final Widget body;
+  final VoidCallback? onCreate;
+  final String label;
+  final IconData icon;
+  final Object? heroTag;
+
+  @override
+  Widget build(BuildContext context) {
+    if (onCreate == null) return body;
+    return Stack(
+      children: [
+        body,
+        Positioned(
+          right: 16,
+          bottom: 16,
+          child: CreateFab(onPressed: onCreate, label: label, icon: icon, heroTag: heroTag),
+        ),
+      ],
+    );
+  }
+}
+
+/// Bottom padding for lists that sit above a [CreateFabLayout] button.
+const createFabScrollPad = SizedBox(height: 88);
+
 class LoadingView extends StatelessWidget {
   const LoadingView({super.key});
   @override

@@ -59,7 +59,21 @@ class _MoreScreenState extends State<MoreScreen> {
     final auth = context.watch<AuthState>();
     if (loading) return const LoadingView();
     final section = widget.section;
-    return ListView(
+
+    VoidCallback? onCreate;
+    String createLabel = S.add;
+    IconData createIcon = Icons.add_rounded;
+    if (section == MoreSection.departments && auth.isAdmin) {
+      onCreate = _addDept;
+    } else if (section == MoreSection.classes && auth.isAdmin) {
+      onCreate = _addClass;
+      createLabel = S.addClass;
+    } else if (section == MoreSection.users && auth.isSuper) {
+      onCreate = _addUser;
+      createIcon = Icons.person_add_alt;
+    }
+
+    final body = ListView(
       children: [
         if (section == MoreSection.account) ...[
           FadeSlide(
@@ -88,10 +102,7 @@ class _MoreScreenState extends State<MoreScreen> {
           ),
         ],
         if (section == MoreSection.departments) ...[
-          SectionHeader(
-            S.departments,
-            action: auth.isAdmin ? TextButton(onPressed: _addDept, child: const Text(S.add)) : null,
-          ),
+          const SectionHeader(S.departments),
           if (departments.isEmpty) const EmptyBox('ክፍል የለም'),
           ...departments.map((d) => SoftCard(
                 child: ListTile(
@@ -113,16 +124,7 @@ class _MoreScreenState extends State<MoreScreen> {
               )),
         ],
         if (section == MoreSection.classes) ...[
-          SectionHeader(S.classes),
-          if (auth.isAdmin)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: FilledButton.icon(
-                onPressed: _addClass,
-                icon: const Icon(Icons.add_rounded),
-                label: const Text(S.addClass),
-              ),
-            ),
+          const SectionHeader(S.classes),
           if (classes.isEmpty) const EmptyBox('አዲስ ምድብ ይፍጠሩ፤ ከዚያ ተማሪዎችን ያክሉ'),
           ...classes.map((g) {
             final count = ((g['members'] as List?) ?? []).length;
@@ -160,7 +162,7 @@ class _MoreScreenState extends State<MoreScreen> {
           }),
         ],
         if (section == MoreSection.users && auth.isSuper) ...[
-          SectionHeader(S.users, action: TextButton(onPressed: _addUser, child: const Text(S.add))),
+          const SectionHeader(S.users),
           ...users.map((u) => SoftCard(
                 child: ListTile(
                   title: Text(u['fullName']),
@@ -181,7 +183,15 @@ class _MoreScreenState extends State<MoreScreen> {
                 ),
               )),
         ],
+        if (onCreate != null) createFabScrollPad else const SizedBox(height: 24),
       ],
+    );
+
+    return CreateFabLayout(
+      onCreate: onCreate,
+      label: createLabel,
+      icon: createIcon,
+      body: body,
     );
   }
 

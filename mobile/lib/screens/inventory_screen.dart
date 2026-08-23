@@ -100,13 +100,13 @@ class _InventoryScreenState extends State<InventoryScreen> {
       );
     }
     final returnable = widget.section == InventorySection.returnable;
-    return returnable
+    final assetBody = returnable
         ? _tabBody(
             hint: 'ቋሚ ንብረት እዚህ ወደ መደብር ይመዝግቡ። ክፍል የሚመረጠው ያወጡ ንብረቶች ላይ ብቻ ነው።',
+            fabPad: _admin,
             children: [
-              if (_admin) _registerAssetButton(true),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
                 child: ReportDoc.button(_exportInventory),
               ),
               const SectionHeader(S.returnable),
@@ -116,10 +116,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
           )
         : _tabBody(
             hint: 'አላቂ ንብረት እዚህ ወደ መደብር ይመዝግቡ። ለክፍል ሲወጣ ከጎን ሜኑ → ያወጡ ንብረቶች።',
+            fabPad: _admin,
             children: [
-              if (_admin) _registerAssetButton(false),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
                 child: ReportDoc.button(_exportInventory),
               ),
               const SectionHeader(S.consumable),
@@ -127,6 +127,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
               ..._consumable.asMap().entries.map((e) => _assetCard(e.value as Map, e.key, returnable: false)),
             ],
           );
+    return CreateFabLayout(
+      onCreate: _admin ? () => _addAsset(returnable ? 'RETURNABLE' : 'CONSUMABLE') : null,
+      label: S.registerAsset,
+      body: assetBody,
+    );
   }
 
   String _loanGroupKey(Map l) {
@@ -160,30 +165,23 @@ class _InventoryScreenState extends State<InventoryScreen> {
   Widget _issuedTab({required bool returnable}) {
     if (!returnable) return _issuedConsumableByDept();
     final items = loans.where((l) => l['asset']?['type'] != 'CONSUMABLE').toList();
-    return _tabBody(
-      hint: 'ቋሚ ንብረት ሲመለስ ታሪኩ ይቀመጣል (ሪፖርት)። የተበላሸ / የጎደለ ብዛት ይመዝገባል።',
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: Row(
-            children: [
-              if (_admin)
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: () => _registerIssued(returnable: true),
-                    icon: const Icon(Icons.outbox_rounded),
-                    label: const Text(S.registerIssued),
-                  ),
-                ),
-              if (_admin) const SizedBox(width: 8),
-              Expanded(child: ReportDoc.button(_exportInventory)),
-            ],
+    return CreateFabLayout(
+      onCreate: _admin ? () => _registerIssued(returnable: true) : null,
+      label: S.registerIssued,
+      icon: Icons.outbox_rounded,
+      body: _tabBody(
+        hint: 'ቋሚ ንብረት ሲመለስ ታሪኩ ይቀመጣል (ሪፖርት)። የተበላሸ / የጎደለ ብዛት ይመዝገባል።',
+        fabPad: _admin,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: ReportDoc.button(_exportInventory),
           ),
-        ),
-        const SectionHeader(S.issuedItems),
-        if (items.isEmpty) const EmptyBox('ያወጡ ንብረት የለም'),
-        ..._groupedIssuedCards(items, returnable: true),
-      ],
+          const SectionHeader(S.issuedItems),
+          if (items.isEmpty) const EmptyBox('ያወጡ ንብረት የለም'),
+          ..._groupedIssuedCards(items, returnable: true),
+        ],
+      ),
     );
   }
 
@@ -197,29 +195,21 @@ class _InventoryScreenState extends State<InventoryScreen> {
       byDeptDate.putIfAbsent(key, () => []).add(Map<String, dynamic>.from(l as Map));
     }
     final keys = byDeptDate.keys.toList()..sort();
-    return _tabBody(
-      hint: 'አላቂ ንብረት በክፍል ይታያል። አንድ ክፍል ብዙ ንብረት መውሰድ ይችላል።',
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: Row(
-            children: [
-              if (_admin)
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: () => _registerIssued(returnable: false),
-                    icon: const Icon(Icons.outbox_rounded),
-                    label: const Text(S.registerIssued),
-                  ),
-                ),
-              if (_admin) const SizedBox(width: 8),
-              Expanded(child: ReportDoc.button(_exportInventory)),
-            ],
+    return CreateFabLayout(
+      onCreate: _admin ? () => _registerIssued(returnable: false) : null,
+      label: S.registerIssued,
+      icon: Icons.outbox_rounded,
+      body: _tabBody(
+        hint: 'አላቂ ንብረት በክፍል ይታያል። አንድ ክፍል ብዙ ንብረት መውሰድ ይችላል።',
+        fabPad: _admin,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: ReportDoc.button(_exportInventory),
           ),
-        ),
-        const SectionHeader('ያወጡ አላቂ በክፍል'),
-        if (keys.isEmpty) const EmptyBox('ያወጡ አላቂ ንብረት የለም'),
-        ...keys.map((key) {
+          const SectionHeader('ያወጡ አላቂ በክፍል'),
+          if (keys.isEmpty) const EmptyBox('ያወጡ አላቂ ንብረት የለም'),
+          ...keys.map((key) {
           final list = byDeptDate[key]!;
           final dept = key.split('|').first;
           final date = list.first['issuedDate'];
@@ -247,11 +237,12 @@ class _InventoryScreenState extends State<InventoryScreen> {
             ),
           );
         }),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _tabBody({required String hint, required List<Widget> children}) {
+  Widget _tabBody({required String hint, required List<Widget> children, bool fabPad = false}) {
     return RefreshIndicator(
       color: AppTheme.seed,
       onRefresh: _load,
@@ -262,19 +253,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
             child: Text(hint, style: const TextStyle(color: AppTheme.muted, fontWeight: FontWeight.w600)),
           ),
           ...children,
-          const SizedBox(height: 24),
+          if (fabPad) createFabScrollPad else const SizedBox(height: 24),
         ],
-      ),
-    );
-  }
-
-  Widget _registerAssetButton(bool returnable) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      child: FilledButton.icon(
-        onPressed: () => _addAsset(returnable ? 'RETURNABLE' : 'CONSUMABLE'),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text(S.registerAsset),
       ),
     );
   }
