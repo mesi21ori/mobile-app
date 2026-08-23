@@ -11,6 +11,7 @@ import 'audit_screen.dart';
 import 'finance_screen.dart';
 import 'inventory_screen.dart';
 import 'more_screen.dart';
+import 'search_screen.dart';
 import 'vestments_screen.dart';
 
 class HomeShell extends StatefulWidget {
@@ -48,6 +49,12 @@ class _HomeShellState extends State<HomeShell> {
             ),
           ],
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.search_rounded),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchScreen())),
+          ),
+        ],
       ),
       drawer: _AppDrawer(
         pageId: pageId,
@@ -103,7 +110,7 @@ class _HomeShellState extends State<HomeShell> {
         if (auth.isClassLeader) {
           return _ClassLeaderHome(onOpen: (id) => setState(() => pageId = id));
         }
-        return _StatsHome(onOpen: (id) => setState(() => pageId = id), admin: auth.isAdmin);
+        return _StatsHome(onOpen: (id) => setState(() => pageId = id), superAdmin: auth.isSuper);
     }
   }
 }
@@ -147,6 +154,7 @@ class _AppDrawer extends StatelessWidget {
                   _tile(AppNav.home, selected: pageId == AppNav.home.id),
                   ...AppNav.modules.where((m) {
                     if (m.adminOnly && !auth.isAdmin) return false;
+                    if (m.id == 'finance' && !auth.isSuper) return false;
                     if (auth.isClassLeader && !m.classLeaderOk) return false;
                     return true;
                   }).map((module) {
@@ -334,9 +342,9 @@ class _ClassLeaderHomeState extends State<_ClassLeaderHome> {
 }
 
 class _StatsHome extends StatefulWidget {
-  const _StatsHome({required this.onOpen, required this.admin});
+  const _StatsHome({required this.onOpen, required this.superAdmin});
   final ValueChanged<String> onOpen;
-  final bool admin;
+  final bool superAdmin;
   @override
   State<_StatsHome> createState() => _StatsHomeState();
 }
@@ -446,7 +454,7 @@ class _StatsHomeState extends State<_StatsHome> {
               _stat('ኦዲት', _n('audits'), Icons.fact_check_rounded, 'a-list'),
             ],
           ),
-          if (widget.admin) ...[
+          if (widget.superAdmin) ...[
             const SectionHeader('ፋይናንስ'),
             _money('ገቢ', _num('income'), AppTheme.seed, 'f-income'),
             _money('ወጪ', _num('expense'), AppTheme.orange, 'f-expense'),

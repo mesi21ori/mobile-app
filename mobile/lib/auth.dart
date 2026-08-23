@@ -27,7 +27,8 @@ class AuthState extends ChangeNotifier {
 
   Future<void> refreshUser() async {
     try {
-      user = Map<String, dynamic>.from(await api.get('/auth/me'));
+      final data = await api.get('/auth/me');
+      user = Map<String, dynamic>.from(data);
       notifyListeners();
     } catch (_) {}
   }

@@ -14,58 +14,72 @@ Future<List<int>?> pickClothes(
   String title = S.issue,
 }) async {
   final selected = <int>{};
+  final search = TextEditingController();
   int? idOf(dynamic v) => jsonInt(v is Map ? v['id'] : v);
   final ok = await showDialog<bool>(
     context: context,
     builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setS) => AlertDialog(
-        title: Text(title),
-        content: SizedBox(
-          width: 360,
-          height: 380,
-          child: ListView(
-            children: [
-              const Text(
-                'የተለያዩ ልብሶችን ይምረጡ (ልብስ 1፣ ልብስ 2፣ …)። አንድ ዓይነት ሁለት ጊዜ አይደለም።',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              ...vestments.map((v) {
-                final id = idOf(v);
-                if (id == null) return const SizedBox.shrink();
-                final available = (v['availableQuantity'] as num?)?.toInt() ?? 0;
-                return CheckboxListTile(
-                  value: selected.contains(id),
-                  title: Text('${v['name'] ?? ''}'),
-                  subtitle: Text('${S.available}: $available'),
-                  onChanged: available < 1
-                      ? null
-                      : (val) => setS(() {
-                            if (val == true) {
-                              selected.add(id);
-                            } else {
-                              selected.remove(id);
-                            }
-                          }),
-                );
-              }),
-              const SizedBox(height: 8),
-              Text(
-                'ተመርጧል: ${selected.length} የተለያዩ ልብሶች',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontWeight: FontWeight.w700, color: AppTheme.seed),
-              ),
-            ],
+      builder: (ctx, setS) {
+        final q = search.text.trim().toLowerCase();
+        final filtered = vestments.where((v) {
+          if (q.isEmpty) return true;
+          return '${v['name'] ?? ''}'.toLowerCase().contains(q);
+        }).toList();
+        return AlertDialog(
+          title: Text(title),
+          content: SizedBox(
+            width: 360,
+            height: 420,
+            child: Column(
+              children: [
+                TextField(
+                  controller: search,
+                  decoration: const InputDecoration(labelText: S.search, prefixIcon: Icon(Icons.search_rounded)),
+                  onChanged: (_) => setS(() {}),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: ListView(
+                    children: [
+                      ...filtered.map((v) {
+                        final id = idOf(v);
+                        if (id == null) return const SizedBox.shrink();
+                        final available = (v['availableQuantity'] as num?)?.toInt() ?? 0;
+                        return CheckboxListTile(
+                          value: selected.contains(id),
+                          title: Text('${v['name'] ?? ''}'),
+                          subtitle: Text('${S.available}: $available'),
+                          onChanged: available < 1
+                              ? null
+                              : (val) => setS(() {
+                                    if (val == true) {
+                                      selected.add(id);
+                                    } else {
+                                      selected.remove(id);
+                                    }
+                                  }),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+                Text(
+                  'ተመርጧል: ${selected.length} የተለያዩ ልብሶች',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontWeight: FontWeight.w700, color: AppTheme.seed),
+                ),
+              ],
+            ),
           ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text(S.cancel)),
-          FilledButton(
-            onPressed: selected.isEmpty ? null : () => Navigator.pop(ctx, true),
-            child: const Text(S.save),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text(S.cancel)),
+            FilledButton(
+              onPressed: selected.isEmpty ? null : () => Navigator.pop(ctx, true),
+              child: const Text(S.save),
+            ),
+          ],
+        );
+      },
     ),
   );
   if (ok != true || selected.isEmpty) return null;
@@ -181,7 +195,7 @@ class _VestmentsScreenState extends State<VestmentsScreen> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: Text(
-                  '${classes.first['name'] ?? ''} · $_studentCountFrom(classes.first) ተማሪ',
+                  '${classes.first['name'] ?? ''} · ${_studentCountFrom(classes.first)} ተማሪ',
                   style: const TextStyle(color: AppTheme.muted, fontWeight: FontWeight.w600),
                 ),
               ),
@@ -675,21 +689,9 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
           : null,
       body: loading
           ? const LoadingView()
-          : Column(
-              children: [
-                if (canManageClass)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                    child: FilledButton.icon(
-                      onPressed: _addMember,
-                      icon: const Icon(Icons.person_add_alt),
-                      label: const Text(S.addStudent),
-                    ),
-                  ),
-                Expanded(
-                  child: members.isEmpty
-                      ? EmptyBox('ተማሪ የለም · ${S.addStudent} ይጫኑ')
-                      : ListView.builder(
+          : members.isEmpty
+              ? EmptyBox('ተማሪ የለም · ${S.addStudent} ይጫኑ')
+              : ListView.builder(
                           itemCount: members.length,
                           itemBuilder: (_, i) {
                             final m = members[i];
@@ -720,9 +722,6 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
                             );
                           },
                         ),
-                ),
-              ],
-            ),
     );
   }
 
@@ -828,11 +827,18 @@ class _EventIssuePageState extends State<EventIssuePage> {
   final selected = <int>{};
   bool loading = true;
   bool saving = false;
+  final studentSearch = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    studentSearch.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -889,8 +895,10 @@ class _EventIssuePageState extends State<EventIssuePage> {
       await auth.api.put('/events/${jsonInt(widget.event['id'])}/participants', {
         'memberIds': selected.toList(),
       });
-      if (mounted) showMsg(context, S.success);
-      await _load();
+      if (mounted) {
+        showMsg(context, S.success);
+        Navigator.pop(context);
+      }
     } catch (e) {
       if (mounted) showMsg(context, e.toString(), error: true);
     } finally {
@@ -934,7 +942,19 @@ class _EventIssuePageState extends State<EventIssuePage> {
             ),
           ),
           if (classMembers.isEmpty) const EmptyBox('ተማሪ የለም · በመደብ ገጽ ተማሪ ያክሉ'),
-          ...classMembers.map((m) {
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: TextField(
+              controller: studentSearch,
+              decoration: const InputDecoration(labelText: S.search, prefixIcon: Icon(Icons.search_rounded)),
+              onChanged: (_) => setState(() {}),
+            ),
+          ),
+          ...classMembers.where((m) {
+            final q = studentSearch.text.trim().toLowerCase();
+            if (q.isEmpty) return true;
+            return '${m['fullName'] ?? ''}'.toLowerCase().contains(q);
+          }).map((m) {
             final id = jsonInt(m['id']);
             if (id == null) return const SizedBox.shrink();
             final on = selected.contains(id);
@@ -953,16 +973,7 @@ class _EventIssuePageState extends State<EventIssuePage> {
               ),
             );
           }),
-          if (classMembers.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: FilledButton.icon(
-                onPressed: saving ? null : _saveParticipants,
-                icon: const Icon(Icons.save_rounded),
-                label: Text('${S.registerParticipants} (${selected.length})'),
-              ),
-            ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 80),
         ],
       ),
     );

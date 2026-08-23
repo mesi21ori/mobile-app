@@ -45,8 +45,10 @@ class _FinanceScreenState extends State<FinanceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final admin = context.watch<AuthState>().isAdmin;
+    final superAdmin = context.watch<AuthState>().isSuper;
     if (loading) return const LoadingView();
+    final opening = summary['openingBalance'] ?? 0;
+    final locked = summary['openingBalanceLocked'] == true;
     return RefreshIndicator(
       color: AppTheme.seed,
       onRefresh: _load,
@@ -81,11 +83,25 @@ class _FinanceScreenState extends State<FinanceScreen> {
             padding: const EdgeInsets.all(16),
             child: StatChip(label: S.net, value: '${summary['net']} ብር', color: AppTheme.blue, icon: Icons.account_balance_wallet_outlined),
           ),
+          if (eventId == null) ...[
+            SoftCard(
+              child: ListTile(
+                leading: const CircleAvatar(backgroundColor: AppTheme.blueSoft, child: Icon(Icons.savings_outlined, color: AppTheme.seed)),
+                title: const Text('የመጀመሪያ ቀሪ ሒሳብ', style: TextStyle(fontWeight: FontWeight.w800)),
+                subtitle: Text(locked ? 'ተቀምጧል · $opening ብር' : 'አልተመዘገበም · ገቢ/ወጪ ከዚህ ይሰላል'),
+                trailing: locked
+                    ? Text('$opening ብር', style: const TextStyle(fontWeight: FontWeight.w900, color: AppTheme.seed))
+                    : (superAdmin
+                        ? TextButton(onPressed: _setOpeningBalance, child: const Text('መዝግብ'))
+                        : null),
+              ),
+            ),
+          ],
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: ReportDoc.button(_exportFinance),
           ),
-          if (admin)
+          if (superAdmin)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
@@ -128,6 +144,35 @@ class _FinanceScreenState extends State<FinanceScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _setOpeningBalance() async {
+    final amount = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('የመጀመሪያ ቀሪ ሒሳብ'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('አሁን ያለው ገንዘብ (deposit) መዝግቡ። አንዴ ከተቀመጠ በኋላ መቀየር አይችልም።', style: TextStyle(color: AppTheme.muted)),
+            const SizedBox(height: 8),
+            TextField(controller: amount, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'መጠን (ብር)')),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text(S.cancel)),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text(S.save)),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await context.read<AuthState>().api.post('/finance/opening-balance', {'amount': double.parse(amount.text)});
+      _load();
+    } catch (e) {
+      if (mounted) showMsg(context, e.toString(), error: true);
+    }
   }
 
   Future<void> _add(String type) async {

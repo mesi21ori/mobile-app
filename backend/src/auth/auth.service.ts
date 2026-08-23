@@ -1,8 +1,9 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto';
+import { UpdateProfileDto } from './profile.dto';
 
 @Injectable()
 export class AuthService {
@@ -42,6 +43,28 @@ export class AuthService {
   async me(userId: number) {
     return this.prisma.user.findUnique({
       where: { id: userId },
+      select: {
+        id: true,
+        fullName: true,
+        username: true,
+        role: true,
+        memberId: true,
+        groupId: true,
+        isActive: true,
+      },
+    });
+  }
+
+  async updateProfile(userId: number, dto: UpdateProfileDto) {
+    const data: { fullName?: string; passwordHash?: string } = {};
+    if (dto.fullName?.trim()) data.fullName = dto.fullName.trim();
+    if (dto.password) data.passwordHash = await bcrypt.hash(dto.password, 10);
+    if (!data.fullName && !data.passwordHash) {
+      throw new BadRequestException('ምንም ለማስተካከል አልተላከም');
+    }
+    return this.prisma.user.update({
+      where: { id: userId },
+      data,
       select: {
         id: true,
         fullName: true,

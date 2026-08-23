@@ -67,9 +67,9 @@ class AppNav {
       icon: Icons.payments_rounded,
       adminOnly: true,
       children: [
-        NavItem(id: 'f-all', title: 'ማጠቃለያ', icon: Icons.account_balance_wallet_outlined, adminOnly: true),
-        NavItem(id: 'f-income', title: S.income, icon: Icons.south_west_rounded, adminOnly: true),
-        NavItem(id: 'f-expense', title: S.expense, icon: Icons.north_east_rounded, adminOnly: true),
+        NavItem(id: 'f-all', title: 'ማጠቃለያ', icon: Icons.account_balance_wallet_outlined, superOnly: true),
+        NavItem(id: 'f-income', title: S.income, icon: Icons.south_west_rounded, superOnly: true),
+        NavItem(id: 'f-expense', title: S.expense, icon: Icons.north_east_rounded, superOnly: true),
       ],
     ),
     NavModule(

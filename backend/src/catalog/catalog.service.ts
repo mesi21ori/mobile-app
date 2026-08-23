@@ -345,6 +345,56 @@ export class CatalogService {
     return this.prisma.setting.findMany();
   }
 
+  async search(q: string, actor?: { role: Role; groupId?: number | null }) {
+    const term = q.trim();
+    if (term.length < 2) return { members: [], assets: [], vestmentLoans: [], groups: [] };
+
+    const memberWhere: any = {
+      fullName: { contains: term, mode: 'insensitive' },
+    };
+    if (actor?.role === Role.CLASS_LEADER && actor.groupId) {
+      memberWhere.groupMembers = { some: { groupId: actor.groupId } };
+    }
+
+    const [members, assets, vestmentLoans, groups] = await Promise.all([
+      this.prisma.member.findMany({
+        where: memberWhere,
+        take: 30,
+        include: { groupMembers: { include: { group: true } }, department: true },
+        orderBy: { fullName: 'asc' },
+      }),
+      actor?.role === Role.CLASS_LEADER
+        ? Promise.resolve([])
+        : this.prisma.asset.findMany({
+            where: { name: { contains: term, mode: 'insensitive' } },
+            take: 20,
+            orderBy: { name: 'asc' },
+          }),
+      actor?.role === Role.CLASS_LEADER
+        ? Promise.resolve([])
+        : this.prisma.vestmentLoan.findMany({
+            where: {
+              member: { fullName: { contains: term, mode: 'insensitive' } },
+            },
+            take: 30,
+            include: { member: true, vestment: true, event: true, group: true },
+            orderBy: { id: 'desc' },
+          }),
+      actor?.role === Role.CLASS_LEADER
+        ? this.prisma.group.findMany({
+            where: { id: actor.groupId ?? -1, name: { contains: term, mode: 'insensitive' } },
+            take: 10,
+          })
+        : this.prisma.group.findMany({
+            where: { name: { contains: term, mode: 'insensitive' } },
+            take: 10,
+            orderBy: { name: 'asc' },
+          }),
+    ]);
+
+    return { members, assets, vestmentLoans, groups };
+  }
+
   async setSetting(key: string, value: string) {
     return this.prisma.setting.upsert({
       where: { key },

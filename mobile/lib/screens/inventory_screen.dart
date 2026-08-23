@@ -129,6 +129,34 @@ class _InventoryScreenState extends State<InventoryScreen> {
           );
   }
 
+  String _loanGroupKey(Map l) {
+    final dept = '${l['department']?['name'] ?? l['member']?['fullName'] ?? '—'}';
+    final date = '${l['issuedDate'] ?? ''}'.split('T').first;
+    return '$dept|$date';
+  }
+
+  List<Widget> _groupedIssuedCards(List items, {required bool returnable}) {
+    final groups = <String, List<Map>>{};
+    for (final l in items) {
+      final key = _loanGroupKey(l as Map);
+      groups.putIfAbsent(key, () => []).add(Map<String, dynamic>.from(l));
+    }
+    final keys = groups.keys.toList()..sort();
+    return keys.map((key) {
+      final list = groups[key]!;
+      if (list.length == 1) return _issuedCard(list.first, returnable: returnable);
+      final dept = list.first['department']?['name'] ?? list.first['member']?['fullName'] ?? '—';
+      return SoftCard(
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+          title: Text('$dept', style: const TextStyle(fontWeight: FontWeight.w800)),
+          subtitle: Text('${EthDate.format(list.first['issuedDate'])} · ${list.length} ንብረቶች'),
+          children: list.map((l) => _issuedCard(l, returnable: returnable)).toList(),
+        ),
+      );
+    }).toList();
+  }
+
   Widget _issuedTab({required bool returnable}) {
     if (!returnable) return _issuedConsumableByDept();
     final items = loans.where((l) => l['asset']?['type'] != 'CONSUMABLE').toList();
@@ -154,19 +182,21 @@ class _InventoryScreenState extends State<InventoryScreen> {
         ),
         const SectionHeader(S.issuedItems),
         if (items.isEmpty) const EmptyBox('ያወጡ ንብረት የለም'),
-        ...items.map((l) => _issuedCard(l as Map, returnable: true)),
+        ..._groupedIssuedCards(items, returnable: true),
       ],
     );
   }
 
   Widget _issuedConsumableByDept() {
     final items = loans.where((l) => l['asset']?['type'] == 'CONSUMABLE').toList();
-    final byDept = <String, List<Map>>{};
+    final byDeptDate = <String, List<Map>>{};
     for (final l in items) {
-      final key = '${l['department']?['name'] ?? 'ክፍል የለም'}';
-      byDept.putIfAbsent(key, () => []).add(Map<String, dynamic>.from(l as Map));
+      final dept = '${l['department']?['name'] ?? 'ክፍል የለም'}';
+      final date = '${l['issuedDate'] ?? ''}'.split('T').first;
+      final key = '$dept|$date';
+      byDeptDate.putIfAbsent(key, () => []).add(Map<String, dynamic>.from(l as Map));
     }
-    final names = byDept.keys.toList()..sort();
+    final keys = byDeptDate.keys.toList()..sort();
     return _tabBody(
       hint: 'አላቂ ንብረት በክፍል ይታያል። አንድ ክፍል ብዙ ንብረት መውሰድ ይችላል።',
       children: [
@@ -188,9 +218,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
           ),
         ),
         const SectionHeader('ያወጡ አላቂ በክፍል'),
-        if (names.isEmpty) const EmptyBox('ያወጡ አላቂ ንብረት የለም'),
-        ...names.map((dept) {
-          final list = byDept[dept]!;
+        if (keys.isEmpty) const EmptyBox('ያወጡ አላቂ ንብረት የለም'),
+        ...keys.map((key) {
+          final list = byDeptDate[key]!;
+          final dept = key.split('|').first;
+          final date = list.first['issuedDate'];
           final sums = <String, int>{};
           for (final l in list) {
             final n = '${l['asset']?['name'] ?? 'ንብረት'}';
@@ -202,7 +234,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
               tilePadding: const EdgeInsets.symmetric(horizontal: 16),
               childrenPadding: const EdgeInsets.only(bottom: 8),
               title: Text(dept, style: const TextStyle(fontWeight: FontWeight.w800)),
-              subtitle: Text('$total ብዛት · ${sums.length} ዓይነት ንብረት'),
+              subtitle: Text('${EthDate.format(date)} · $total ብዛት · ${sums.length} ዓይነት'),
               children: [
                 ...sums.entries.map(
                   (e) => ListTile(
@@ -436,48 +468,59 @@ class _InventoryScreenState extends State<InventoryScreen> {
       if (id == null) continue;
       qtyCtrls[id] = TextEditingController(text: '1');
     }
+    final searchCtrl = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
-          title: const Text(S.registerIssued),
-          content: SizedBox(
-            width: 360,
-            height: 460,
-            child: ListView(
-              children: [
-                Text(
-                  returnable
-                      ? 'አንድ ክፍል ከአንድ በላይ ቋሚ ንብረት መውሰድ ይችላል'
-                      : 'አንድ ክፍል ከአንድ በላይ አላቂ ንብረት መውሰድ ይችላል',
-                  style: const TextStyle(color: AppTheme.muted, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<int>(
-                  value: deptId,
-                  decoration: const InputDecoration(labelText: S.departments),
-                  items: _deptItems,
-                  onChanged: (v) => setS(() => deptId = v),
-                ),
-                if (returnable)
-                  DropdownButtonFormField<int?>(
-                    value: memberId,
-                    decoration: const InputDecoration(labelText: 'የወሰደው አባል (ከተፈለገ)'),
-                    items: [
-                      const DropdownMenuItem<int?>(value: null, child: Text('—')),
-                      ...members
-                          .map((m) {
-                            final id = jsonInt(m['id']);
-                            if (id == null) return null;
-                            return DropdownMenuItem<int?>(value: id, child: Text('${m['fullName'] ?? ''}'));
-                          })
-                          .whereType<DropdownMenuItem<int?>>(),
-                    ],
-                    onChanged: (v) => setS(() => memberId = v),
+        builder: (ctx, setS) {
+          final q = searchCtrl.text.trim().toLowerCase();
+          final filtered = list.where((a) => q.isEmpty || '${a['name'] ?? ''}'.toLowerCase().contains(q)).toList();
+          return AlertDialog(
+            title: const Text(S.registerIssued),
+            content: SizedBox(
+              width: 360,
+              height: 460,
+              child: ListView(
+                children: [
+                  Text(
+                    returnable
+                        ? 'አንድ ክፍል ከአንድ በላይ ቋሚ ንብረት መውሰድ ይችላል'
+                        : 'አንድ ክፍል ከአንድ በላይ አላቂ ንብረት መውሰድ ይችላል',
+                    style: const TextStyle(color: AppTheme.muted, fontWeight: FontWeight.w600),
                   ),
-                const SizedBox(height: 8),
-                const Text('ንብረቶች ይምረጡ', style: TextStyle(fontWeight: FontWeight.w800)),
-                ...list.map((a) {
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: searchCtrl,
+                    decoration: const InputDecoration(labelText: S.search, prefixIcon: Icon(Icons.search_rounded)),
+                    onChanged: (_) => setS(() {}),
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<int>(
+                    value: deptId,
+                    decoration: const InputDecoration(labelText: S.departments),
+                    items: _deptItems,
+                    onChanged: (v) => setS(() => deptId = v),
+                  ),
+                  if (returnable)
+                    DropdownButtonFormField<int?>(
+                      value: memberId,
+                      decoration: const InputDecoration(labelText: 'የወሰደው አባል (ከተፈለገ)'),
+                      items: [
+                        const DropdownMenuItem<int?>(value: null, child: Text('—')),
+                        ...members
+                            .where((m) => q.isEmpty || '${m['fullName'] ?? ''}'.toLowerCase().contains(q))
+                            .map((m) {
+                              final id = jsonInt(m['id']);
+                              if (id == null) return null;
+                              return DropdownMenuItem<int?>(value: id, child: Text('${m['fullName'] ?? ''}'));
+                            })
+                            .whereType<DropdownMenuItem<int?>>(),
+                      ],
+                      onChanged: (v) => setS(() => memberId = v),
+                    ),
+                  const SizedBox(height: 8),
+                  const Text('ንብረቶች ይምረጡ', style: TextStyle(fontWeight: FontWeight.w800)),
+                  ...filtered.map((a) {
                   final id = jsonInt(a['id']);
                   if (id == null) return const SizedBox.shrink();
                   final available = (a['availableQuantity'] as num?)?.toInt() ?? 0;
@@ -520,9 +563,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
               child: const Text(S.save),
             ),
           ],
-        ),
+        );
+        },
       ),
     );
+    searchCtrl.dispose();
     if (ok == true) {
       try {
         await context.read<AuthState>().api.post('/asset-loans/checkout-many', {

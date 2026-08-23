@@ -61,7 +61,7 @@ class _MoreScreenState extends State<MoreScreen> {
     final section = widget.section;
     return ListView(
       children: [
-        if (section == MoreSection.account)
+        if (section == MoreSection.account) ...[
           FadeSlide(
             child: SoftCard(
               child: ListTile(
@@ -71,9 +71,22 @@ class _MoreScreenState extends State<MoreScreen> {
                 ),
                 title: Text(auth.user?['fullName'] ?? '', style: const TextStyle(fontWeight: FontWeight.w800)),
                 subtitle: Text('${auth.user?['username']} · ${S.roleLabel(auth.role)}'),
+                trailing: IconButton(
+                  icon: const Icon(Icons.edit_rounded, color: AppTheme.seed),
+                  onPressed: _editProfile,
+                ),
               ),
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: OutlinedButton.icon(
+              onPressed: () => context.read<AuthState>().logout(),
+              icon: const Icon(Icons.logout),
+              label: const Text(S.logout),
+            ),
+          ),
+        ],
         if (section == MoreSection.departments) ...[
           SectionHeader(
             S.departments,
@@ -149,29 +162,116 @@ class _MoreScreenState extends State<MoreScreen> {
         if (section == MoreSection.users && auth.isSuper) ...[
           SectionHeader(S.users, action: TextButton(onPressed: _addUser, child: const Text(S.add))),
           ...users.map((u) => SoftCard(
-                child: SwitchListTile(
-                  activeTrackColor: AppTheme.seed,
+                child: ListTile(
                   title: Text(u['fullName']),
                   subtitle: Text('${u['username']} · ${S.roleLabel(u['role'])}'),
-                  value: u['isActive'] == true,
-                  onChanged: (v) async {
-                    await context.read<AuthState>().api.patch('/users/${u['id']}', {'isActive': v});
-                    _load();
-                  },
+                  trailing: PopupMenuButton<String>(
+                    onSelected: (v) {
+                      if (v == 'edit') _editUser(u as Map);
+                      if (v == 'toggle') _toggleUser(u as Map);
+                    },
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(value: 'edit', child: Text(S.edit)),
+                      PopupMenuItem(
+                        value: 'toggle',
+                        child: Text(u['isActive'] == true ? 'Disable' : 'Enable'),
+                      ),
+                    ],
+                  ),
                 ),
               )),
         ],
-        if (section == MoreSection.account)
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: OutlinedButton.icon(
-              onPressed: () => context.read<AuthState>().logout(),
-              icon: const Icon(Icons.logout),
-              label: const Text(S.logout),
-            ),
-          ),
       ],
     );
+  }
+
+  Future<void> _editProfile() async {
+    final auth = context.read<AuthState>();
+    final name = TextEditingController(text: auth.user?['fullName']?.toString() ?? '');
+    final pass = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('መገለጫ አስተካክል'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: name, decoration: const InputDecoration(labelText: 'ሙሉ ስም')),
+            const SizedBox(height: 8),
+            TextField(controller: pass, obscureText: true, decoration: const InputDecoration(labelText: 'አዲስ የይለፍ ቃል (ከተፈለገ)')),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text(S.cancel)),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text(S.save)),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      final body = <String, dynamic>{};
+      if (name.text.trim().isNotEmpty) body['fullName'] = name.text.trim();
+      if (pass.text.isNotEmpty) body['password'] = pass.text;
+      await auth.api.patch('/auth/profile', body);
+      await auth.refreshUser();
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (mounted) showMsg(context, e.toString(), error: true);
+    }
+  }
+
+  Future<void> _editUser(Map u) async {
+    final name = TextEditingController(text: u['fullName']?.toString() ?? '');
+    String role = '${u['role'] ?? 'USER'}';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          title: const Text(S.edit),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: name, decoration: const InputDecoration(labelText: 'ሙሉ ስም')),
+              DropdownButtonFormField<String>(
+                value: role,
+                items: const [
+                  DropdownMenuItem(value: 'SUPER_ADMIN', child: Text(S.superAdmin)),
+                  DropdownMenuItem(value: 'ADMIN', child: Text(S.admin)),
+                  DropdownMenuItem(value: 'CLASS_LEADER', child: Text(S.classLeader)),
+                  DropdownMenuItem(value: 'USER', child: Text(S.user)),
+                ],
+                onChanged: (v) => setS(() => role = v!),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text(S.cancel)),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text(S.save)),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await context.read<AuthState>().api.patch('/users/${jsonInt(u['id'])}', {
+        'fullName': name.text.trim(),
+        'role': role,
+      });
+      _load();
+    } catch (e) {
+      if (mounted) showMsg(context, e.toString(), error: true);
+    }
+  }
+
+  Future<void> _toggleUser(Map u) async {
+    try {
+      await context.read<AuthState>().api.patch('/users/${jsonInt(u['id'])}', {
+        'isActive': u['isActive'] != true,
+      });
+      _load();
+    } catch (e) {
+      if (mounted) showMsg(context, e.toString(), error: true);
+    }
   }
 
   Future<void> _addClass() async {

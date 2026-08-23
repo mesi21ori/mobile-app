@@ -14,3 +14,8 @@ export class FinanceDto {
   @IsNumber()
   amount: number;
 }
+
+export class OpeningBalanceDto {
+  @IsNumber()
+  amount: number;
+}

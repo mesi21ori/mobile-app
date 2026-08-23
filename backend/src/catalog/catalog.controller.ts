@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -158,6 +158,11 @@ export class CatalogController {
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   addMembers(@Body() dto: AddGroupMembersDto) {
     return this.catalog.addGroupMembers(dto);
+  }
+
+  @Get('search')
+  search(@Query('q') q: string, @Req() req) {
+    return this.catalog.search(q || '', req.user);
   }
 
   @Get('settings')
