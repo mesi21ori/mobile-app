@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertEthPhone } from '../phone.util';
 import {
   AddGroupMembersDto,
   DepartmentDto,
@@ -81,10 +82,11 @@ export class CatalogService {
       if (!actor.groupId) throw new BadRequestException('መጀመሪያ ምድብ ይፍጠሩ');
       groupId = actor.groupId;
     }
+    const phoneNumber = assertEthPhone(dto.phoneNumber, true);
     const member = await this.prisma.member.create({
       data: {
         fullName: dto.fullName,
-        phoneNumber: dto.phoneNumber,
+        phoneNumber,
         departmentId: dto.departmentId,
       },
       include: { department: true, groupMembers: true },
@@ -105,11 +107,13 @@ export class CatalogService {
     await this.assertMemberInLeaderGroup(actor || { role: Role.ADMIN }, id);
     const member = await this.prisma.member.findUnique({ where: { id } });
     if (!member) throw new BadRequestException('አባሉ አልተገኘም');
+    const phoneNumber =
+      dto.phoneNumber !== undefined ? assertEthPhone(dto.phoneNumber, false) ?? null : undefined;
     return this.prisma.member.update({
       where: { id },
       data: {
         ...(dto.fullName != null && dto.fullName.trim() ? { fullName: dto.fullName.trim() } : {}),
-        ...(dto.phoneNumber !== undefined ? { phoneNumber: dto.phoneNumber?.trim() || null } : {}),
+        ...(phoneNumber !== undefined ? { phoneNumber } : {}),
       },
       include: { department: true, groupMembers: { include: { group: true } } },
     });

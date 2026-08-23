@@ -5,6 +5,7 @@ import '../auth.dart';
 import '../ethiopian_date.dart';
 import '../strings.dart';
 import '../theme.dart';
+import '../phone.dart';
 import '../reports.dart';
 import '../widgets.dart';
 
@@ -311,58 +312,11 @@ class _VestmentsScreenState extends State<VestmentsScreen> {
                   ),
                 )),
           ],
-          const SizedBox(height: 88),
+          const SizedBox(height: 24),
         ],
       ),
     );
-    if (section == VestmentsSection.classes && auth.isClassLeader && classes.isNotEmpty) {
-      return Stack(
-        children: [
-          body,
-          Positioned(
-            right: 16,
-            bottom: 16,
-            child: FloatingActionButton.extended(
-              onPressed: () => _addStudentToGroup(classes.first),
-              icon: const Icon(Icons.person_add_alt),
-              label: const Text(S.addStudent),
-            ),
-          ),
-        ],
-      );
-    }
     return body;
-  }
-
-  Future<void> _addStudentToGroup(Map group) async {
-    final name = TextEditingController();
-    final phone = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text(S.addStudent),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: name, decoration: const InputDecoration(labelText: 'ሙሉ ስም')),
-            const SizedBox(height: 8),
-            TextField(controller: phone, decoration: const InputDecoration(labelText: 'ስልክ')),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text(S.cancel)),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text(S.save)),
-        ],
-      ),
-    );
-    if (ok == true && name.text.trim().isNotEmpty) {
-      await context.read<AuthState>().api.post('/members', {
-        'fullName': name.text.trim(),
-        'phoneNumber': phone.text.trim(),
-        'groupId': group['id'],
-      });
-      _load();
-    }
   }
 
   Future<void> _addClass() async {
@@ -785,7 +739,11 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
           children: [
             TextField(controller: name, decoration: const InputDecoration(labelText: 'ሙሉ ስም')),
             const SizedBox(height: 8),
-            TextField(controller: phone, decoration: const InputDecoration(labelText: 'ስልክ')),
+            TextField(
+              controller: phone,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(labelText: 'ስልክ', hintText: '0975989898'),
+            ),
           ],
         ),
         actions: [
@@ -794,13 +752,21 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
         ],
       ),
     );
-    if (ok == true && name.text.trim().isNotEmpty) {
+    if (ok != true || name.text.trim().isEmpty) return;
+    final phoneErr = EthPhone.validate(phone.text);
+    if (phoneErr != null) {
+      if (mounted) showMsg(context, phoneErr, error: true);
+      return;
+    }
+    try {
       await context.read<AuthState>().api.post('/members', {
         'fullName': name.text.trim(),
         'phoneNumber': phone.text.trim(),
         'groupId': widget.group['id'],
       });
       _load();
+    } catch (e) {
+      if (mounted) showMsg(context, e.toString(), error: true);
     }
   }
 
@@ -816,7 +782,11 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
           children: [
             TextField(controller: name, decoration: const InputDecoration(labelText: 'ሙሉ ስም')),
             const SizedBox(height: 8),
-            TextField(controller: phone, decoration: const InputDecoration(labelText: 'ስልክ')),
+            TextField(
+              controller: phone,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(labelText: 'ስልክ', hintText: '0975989898'),
+            ),
           ],
         ),
         actions: [
@@ -825,16 +795,20 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
         ],
       ),
     );
-    if (ok == true && name.text.trim().isNotEmpty) {
-      try {
-        await context.read<AuthState>().api.patch('/members/${jsonInt(m['id'])}', {
-          'fullName': name.text.trim(),
-          'phoneNumber': phone.text.trim(),
-        });
-        _load();
-      } catch (e) {
-        if (mounted) showMsg(context, e.toString(), error: true);
-      }
+    if (ok != true || name.text.trim().isEmpty) return;
+    final phoneErr = EthPhone.validate(phone.text, required: false);
+    if (phoneErr != null) {
+      if (mounted) showMsg(context, phoneErr, error: true);
+      return;
+    }
+    try {
+      await context.read<AuthState>().api.patch('/members/${jsonInt(m['id'])}', {
+        'fullName': name.text.trim(),
+        'phoneNumber': phone.text.trim(),
+      });
+      _load();
+    } catch (e) {
+      if (mounted) showMsg(context, e.toString(), error: true);
     }
   }
 
