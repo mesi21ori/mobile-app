@@ -18,6 +18,19 @@ class AuthState extends ChangeNotifier {
   String get role => user?['role'] ?? 'USER';
   bool get isAdmin => role == 'ADMIN' || role == 'SUPER_ADMIN';
   bool get isSuper => role == 'SUPER_ADMIN';
+  bool get isClassLeader => role == 'CLASS_LEADER';
+  bool get canManageClass => isAdmin || isClassLeader;
+  bool get canCreateEvent => isAdmin || isClassLeader;
+  bool get canManageVestments => isAdmin;
+  bool get canRegisterParticipants => isClassLeader;
+  int? get groupId => jsonInt(user?['groupId']);
+
+  Future<void> refreshUser() async {
+    try {
+      user = Map<String, dynamic>.from(await api.get('/auth/me'));
+      notifyListeners();
+    } catch (_) {}
+  }
 
   Future<void> _load() async {
     api.baseUrl = AppConfig.defaultBaseUrl();

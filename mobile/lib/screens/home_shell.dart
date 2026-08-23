@@ -22,9 +22,20 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   String pageId = AppNav.home.id;
 
+  bool _classLeaderPageAllowed(String id, AuthState auth) {
+    if (!auth.isClassLeader) return true;
+    const allowed = {'home', 'm-account', 'v-classes', 'v-events'};
+    return allowed.contains(id);
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthState>();
+    if (!_classLeaderPageAllowed(pageId, auth)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => pageId = AppNav.home.id);
+      });
+    }
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
@@ -89,6 +100,9 @@ class _HomeShellState extends State<HomeShell> {
       case 'm-users':
         return const MoreScreen(section: MoreSection.users);
       default:
+        if (auth.isClassLeader) {
+          return _ClassLeaderHome(onOpen: (id) => setState(() => pageId = id));
+        }
         return _StatsHome(onOpen: (id) => setState(() => pageId = id), admin: auth.isAdmin);
     }
   }
@@ -131,10 +145,15 @@ class _AppDrawer extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 children: [
                   _tile(AppNav.home, selected: pageId == AppNav.home.id),
-                  ...AppNav.modules.where((m) => !m.adminOnly || auth.isAdmin).map((module) {
+                  ...AppNav.modules.where((m) {
+                    if (m.adminOnly && !auth.isAdmin) return false;
+                    if (auth.isClassLeader && !m.classLeaderOk) return false;
+                    return true;
+                  }).map((module) {
                     final kids = module.children.where((c) {
                       if (c.superOnly && !auth.isSuper) return false;
                       if (c.adminOnly && !auth.isAdmin) return false;
+                      if (auth.isClassLeader && !c.classLeaderOk) return false;
                       return true;
                     }).toList();
                     final open = AppNav.moduleFor(pageId) == module.id;
@@ -178,6 +197,137 @@ class _AppDrawer extends StatelessWidget {
           title: Text(item.title, style: TextStyle(fontWeight: selected ? FontWeight.w800 : FontWeight.w600, color: selected ? AppTheme.seed : AppTheme.ink)),
           onTap: () => onSelect(item.id),
         ),
+      ),
+    );
+  }
+}
+
+class _ClassLeaderHome extends StatefulWidget {
+  const _ClassLeaderHome({required this.onOpen});
+  final ValueChanged<String> onOpen;
+  @override
+  State<_ClassLeaderHome> createState() => _ClassLeaderHomeState();
+}
+
+class _ClassLeaderHomeState extends State<_ClassLeaderHome> {
+  Map? group;
+  int eventCount = 0;
+  bool loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final api = context.read<AuthState>().api;
+      final res = await Future.wait([api.get('/groups'), api.get('/events')]);
+      final groups = (res[0] as List?) ?? [];
+      setState(() {
+        group = groups.isNotEmpty ? Map<String, dynamic>.from(groups.first as Map) : null;
+        eventCount = ((res[1] as List?) ?? []).length;
+        loading = false;
+      });
+    } catch (_) {
+      setState(() => loading = false);
+    }
+  }
+
+  int get _studentCount {
+    if (group == null) return 0;
+    return ((group!['members'] as List?) ?? []).length;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) return const LoadingView();
+    final name = group?['name']?.toString() ?? 'መደብ';
+    return RefreshIndicator(
+      color: AppTheme.seed,
+      onRefresh: _load,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+        children: [
+          FadeSlide(
+            child: Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Colors.white, AppTheme.mist],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: const Color(0xFFE4EEFB)),
+              ),
+              child: Row(
+                children: [
+                  const AppLogo(size: 72, elevated: false),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+                        Text(S.roleLabel('CLASS_LEADER'), style: const TextStyle(color: AppTheme.seed, fontWeight: FontWeight.w700)),
+                        Text('ዛሬ · ${EthDate.now().label}', style: const TextStyle(color: AppTheme.muted, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SectionHeader('የመደብ ሪፖርት'),
+          Material(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(22),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(22),
+              onTap: () => widget.onOpen('v-classes'),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: const Color(0xFFE4EEFB)),
+                ),
+                child: Column(
+                  children: [
+                    const CircleAvatar(
+                      radius: 28,
+                      backgroundColor: AppTheme.blueSoft,
+                      child: Icon(Icons.people_alt_rounded, color: AppTheme.seed, size: 32),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      '$_studentCount',
+                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 36, color: AppTheme.seed),
+                    ),
+                    const Text('ተማሪዎች በመደብዎ', style: TextStyle(color: AppTheme.muted, fontWeight: FontWeight.w700)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SoftCard(
+            onTap: () => widget.onOpen('v-events'),
+            child: ListTile(
+              leading: const CircleAvatar(backgroundColor: AppTheme.blueSoft, child: Icon(Icons.event_rounded, color: AppTheme.seed)),
+              title: const Text('በዓላት', style: TextStyle(fontWeight: FontWeight.w800)),
+              subtitle: Text('$eventCount በዓል · ተሳታፊዎችን ይመድቡ'),
+              trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.seed),
+            ),
+          ),
+          if (group == null)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: EmptyBox('መጀመሪያ መደብ ይፍጠሩ · ከዚያ ተማሪዎችን ያክሉ'),
+            ),
+        ],
       ),
     );
   }

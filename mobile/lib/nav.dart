@@ -8,12 +8,14 @@ class NavItem {
     required this.icon,
     this.adminOnly = false,
     this.superOnly = false,
+    this.classLeaderOk = false,
   });
   final String id;
   final String title;
   final IconData icon;
   final bool adminOnly;
   final bool superOnly;
+  final bool classLeaderOk;
 }
 
 class NavModule {
@@ -23,25 +25,28 @@ class NavModule {
     required this.icon,
     required this.children,
     this.adminOnly = false,
+    this.classLeaderOk = false,
   });
   final String id;
   final String title;
   final IconData icon;
   final List<NavItem> children;
   final bool adminOnly;
+  final bool classLeaderOk;
 }
 
 class AppNav {
-  static const home = NavItem(id: 'home', title: 'ሪፖርት', icon: Icons.bar_chart_rounded);
+  static const home = NavItem(id: 'home', title: 'ሪፖርት', icon: Icons.bar_chart_rounded, classLeaderOk: true);
 
   static const modules = [
     NavModule(
       id: 'vestments',
       title: S.vestments,
       icon: Icons.checkroom_rounded,
+      classLeaderOk: true,
       children: [
-        NavItem(id: 'v-classes', title: S.classes, icon: Icons.groups_rounded),
-        NavItem(id: 'v-events', title: S.events, icon: Icons.event_rounded),
+        NavItem(id: 'v-classes', title: S.classes, icon: Icons.groups_rounded, classLeaderOk: true),
+        NavItem(id: 'v-events', title: S.events, icon: Icons.event_rounded, classLeaderOk: true),
         NavItem(id: 'v-clothes', title: S.vestments, icon: Icons.checkroom_outlined),
         NavItem(id: 'v-dirty', title: S.dirtyList, icon: Icons.local_laundry_service_outlined),
       ],
@@ -79,8 +84,9 @@ class AppNav {
       id: 'more',
       title: S.more,
       icon: Icons.settings_rounded,
+      classLeaderOk: true,
       children: [
-        NavItem(id: 'm-account', title: 'መገለጫ', icon: Icons.person_rounded),
+        NavItem(id: 'm-account', title: 'መገለጫ', icon: Icons.person_rounded, classLeaderOk: true),
         NavItem(id: 'm-departments', title: S.departments, icon: Icons.apartment_rounded),
         NavItem(id: 'm-classes', title: S.classes, icon: Icons.groups_rounded),
         NavItem(id: 'm-users', title: S.users, icon: Icons.manage_accounts_rounded, superOnly: true),

@@ -11,6 +11,7 @@ datasource db {
 enum Role {
   SUPER_ADMIN
   ADMIN
+  CLASS_LEADER
   USER
 }
 
@@ -49,6 +50,8 @@ model User {
   role         Role     @default(USER)
   memberId     Int?     @unique @map("member_id")
   member       Member?  @relation(fields: [memberId], references: [id])
+  groupId      Int?     @map("group_id")
+  group        Group?   @relation(fields: [groupId], references: [id])
   isActive     Boolean  @default(true) @map("is_active")
   createdAt    DateTime @default(now()) @map("created_at")
 
@@ -81,6 +84,7 @@ model Member {
   groupMembers GroupMember[]
   vestmentLoans VestmentLoan[]
   assetLoans   AssetLoan[]
+  eventParticipants EventParticipant[]
 
   @@map("members")
 }
@@ -104,6 +108,7 @@ model Event {
   dueDate   DateTime @map("due_date") @db.Date
   loans     VestmentLoan[]
   finance   Finance[]
+  participants EventParticipant[]
 
   @@map("events")
 }
@@ -113,6 +118,8 @@ model Group {
   name    String        @map("group_name")
   members GroupMember[]
   loans   VestmentLoan[]
+  leaders User[]
+  eventParticipants EventParticipant[]
 
   @@map("groups")
 }
@@ -125,6 +132,19 @@ model GroupMember {
 
   @@id([groupId, memberId])
   @@map("group_members")
+}
+
+model EventParticipant {
+  eventId   Int      @map("event_id")
+  groupId   Int      @map("group_id")
+  memberId  Int      @map("member_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, groupId, memberId])
+  @@map("event_participants")
 }
 
 model VestmentLoan {

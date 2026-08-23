@@ -17,6 +17,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   final userCtrl = TextEditingController(text: 'admin');
   final passCtrl = TextEditingController();
   bool busy = false;
+  bool showPass = false;
   late final AnimationController _pulse;
 
   @override
@@ -118,10 +119,14 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                   const SizedBox(height: 12),
                                   TextField(
                                     controller: passCtrl,
-                                    obscureText: true,
-                                    decoration: const InputDecoration(
+                                    obscureText: !showPass,
+                                    decoration: InputDecoration(
                                       labelText: S.password,
-                                      prefixIcon: Icon(Icons.lock_outline_rounded),
+                                      prefixIcon: const Icon(Icons.lock_outline_rounded),
+                                      suffixIcon: IconButton(
+                                        onPressed: () => setState(() => showPass = !showPass),
+                                        icon: Icon(showPass ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(height: 16),

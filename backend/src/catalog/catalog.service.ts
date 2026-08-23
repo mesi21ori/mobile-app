@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   AddGroupMembersDto,
@@ -6,6 +7,7 @@ import {
   EventDto,
   GroupDto,
   MemberDto,
+  SetEventParticipantsDto,
   UpdateDepartmentDto,
   UpdateEventDto,
   UpdateMemberDto,
@@ -16,6 +18,22 @@ import {
 @Injectable()
 export class CatalogService {
   constructor(private prisma: PrismaService) {}
+
+  private assertLeaderGroup(actor: { role: Role; groupId?: number | null }, groupId: number) {
+    if (actor.role !== Role.CLASS_LEADER) return;
+    if (!actor.groupId || actor.groupId !== groupId) {
+      throw new BadRequestException('በዚህ ምድብ ላይ ፈቃድ የለዎትም');
+    }
+  }
+
+  private async assertMemberInLeaderGroup(actor: { role: Role; groupId?: number | null }, memberId: number) {
+    if (actor.role !== Role.CLASS_LEADER) return;
+    if (!actor.groupId) throw new BadRequestException('መጀመሪያ ምድብ ይፍጠሩ');
+    const link = await this.prisma.groupMember.findUnique({
+      where: { groupId_memberId: { groupId: actor.groupId, memberId } },
+    });
+    if (!link) throw new BadRequestException('ይህ ተማሪ በምድብዎ ውስጥ የለም');
+  }
 
   departments() {
     return this.prisma.department.findMany({ orderBy: { name: 'asc' } });
@@ -57,7 +75,12 @@ export class CatalogService {
     });
   }
 
-  async createMember(dto: MemberDto) {
+  async createMember(dto: MemberDto, actor?: { role: Role; groupId?: number | null }) {
+    let groupId = dto.groupId;
+    if (actor?.role === Role.CLASS_LEADER) {
+      if (!actor.groupId) throw new BadRequestException('መጀመሪያ ምድብ ይፍጠሩ');
+      groupId = actor.groupId;
+    }
     const member = await this.prisma.member.create({
       data: {
         fullName: dto.fullName,
@@ -66,9 +89,9 @@ export class CatalogService {
       },
       include: { department: true, groupMembers: true },
     });
-    if (dto.groupId) {
+    if (groupId) {
       await this.prisma.groupMember.createMany({
-        data: [{ groupId: dto.groupId, memberId: member.id }],
+        data: [{ groupId, memberId: member.id }],
         skipDuplicates: true,
       });
     }
@@ -78,7 +101,8 @@ export class CatalogService {
     });
   }
 
-  async updateMember(id: number, dto: UpdateMemberDto) {
+  async updateMember(id: number, dto: UpdateMemberDto, actor?: { role: Role; groupId?: number | null }) {
+    await this.assertMemberInLeaderGroup(actor || { role: Role.ADMIN }, id);
     const member = await this.prisma.member.findUnique({ where: { id } });
     if (!member) throw new BadRequestException('አባሉ አልተገኘም');
     return this.prisma.member.update({
@@ -91,7 +115,8 @@ export class CatalogService {
     });
   }
 
-  async deleteMember(id: number) {
+  async deleteMember(id: number, actor?: { role: Role; groupId?: number | null }) {
+    await this.assertMemberInLeaderGroup(actor || { role: Role.ADMIN }, id);
     const [vestments, assets, user] = await Promise.all([
       this.prisma.vestmentLoan.count({ where: { memberId: id } }),
       this.prisma.assetLoan.count({ where: { memberId: id } }),
@@ -173,16 +198,93 @@ export class CatalogService {
   }
 
   async deleteEvent(id: number) {
-    const [loans, finance] = await Promise.all([
+    const [loans, finance, participants] = await Promise.all([
       this.prisma.vestmentLoan.count({ where: { eventId: id } }),
       this.prisma.finance.count({ where: { eventId: id } }),
+      this.prisma.eventParticipant.count({ where: { eventId: id } }),
     ]);
     if (loans || finance) throw new BadRequestException('ይህ በዓል ታሪክ አለው · ሊወገድ አይችልም');
+    if (participants) await this.prisma.eventParticipant.deleteMany({ where: { eventId: id } });
     return this.prisma.event.delete({ where: { id } });
   }
 
-  groups() {
+  async eventParticipants(eventId: number, actor?: { role: Role; groupId?: number | null }) {
+    const event = await this.prisma.event.findUnique({ where: { id: eventId } });
+    if (!event) throw new BadRequestException('በዓሉ አልተገኘም');
+
+    const where: { eventId: number; groupId?: number } = { eventId };
+    if (actor?.role === Role.CLASS_LEADER) {
+      if (!actor.groupId) return [];
+      where.groupId = actor.groupId;
+    }
+
+    const rows = await this.prisma.eventParticipant.findMany({
+      where,
+      include: {
+        group: true,
+        member: true,
+      },
+      orderBy: [{ group: { name: 'asc' } }, { member: { fullName: 'asc' } }],
+    });
+
+    const byGroup = new Map<number, { group: { id: number; name: string }; members: any[] }>();
+    for (const row of rows) {
+      if (!byGroup.has(row.groupId)) {
+        byGroup.set(row.groupId, { group: { id: row.group.id, name: row.group.name }, members: [] });
+      }
+      byGroup.get(row.groupId)!.members.push({
+        id: row.member.id,
+        fullName: row.member.fullName,
+        phoneNumber: row.member.phoneNumber,
+      });
+    }
+    return [...byGroup.values()];
+  }
+
+  async setEventParticipants(
+    eventId: number,
+    dto: SetEventParticipantsDto,
+    actor: { id: number; role: Role; groupId?: number | null },
+  ) {
+    const event = await this.prisma.event.findUnique({ where: { id: eventId } });
+    if (!event) throw new BadRequestException('በዓሉ አልተገኘም');
+
+    let groupId = dto.groupId;
+    if (actor.role === Role.CLASS_LEADER) {
+      if (!actor.groupId) throw new BadRequestException('መጀመሪያ መደብ ይፍጠሩ');
+      groupId = actor.groupId;
+    } else if (!groupId) {
+      throw new BadRequestException('መደብ ይምረጡ');
+    }
+
+    const memberIds = [...new Set((dto.memberIds || []).map((id) => Number(id)).filter((id) => Number.isInteger(id)))];
+    if (memberIds.length) {
+      const inGroup = await this.prisma.groupMember.findMany({
+        where: { groupId, memberId: { in: memberIds } },
+      });
+      if (inGroup.length !== memberIds.length) {
+        throw new BadRequestException('ተማሪው በዚህ መደብ ውስጥ የለም');
+      }
+    }
+
+    await this.prisma.eventParticipant.deleteMany({ where: { eventId, groupId } });
+    if (memberIds.length) {
+      await this.prisma.eventParticipant.createMany({
+        data: memberIds.map((memberId) => ({ eventId, groupId: groupId!, memberId })),
+        skipDuplicates: true,
+      });
+    }
+
+    return this.eventParticipants(eventId, actor);
+  }
+
+  groups(actor?: { role: Role; groupId?: number | null }) {
+    if (actor?.role === Role.CLASS_LEADER && !actor.groupId) {
+      return Promise.resolve([]);
+    }
+    const where = actor?.role === Role.CLASS_LEADER && actor.groupId ? { id: actor.groupId } : undefined;
     return this.prisma.group.findMany({
+      where,
       include: {
         members: { include: { member: true } },
       },
@@ -190,14 +292,27 @@ export class CatalogService {
     });
   }
 
-  createGroup(dto: GroupDto) {
+  async createGroup(dto: GroupDto, actor?: { id: number; role: Role; groupId?: number | null }) {
+    if (actor?.role === Role.CLASS_LEADER) {
+      if (actor.groupId) throw new BadRequestException('አስቀድመው ምድብ አለዎት');
+      const group = await this.prisma.group.create({
+        data: { name: dto.name.trim() },
+        include: { members: { include: { member: true } } },
+      });
+      await this.prisma.user.update({
+        where: { id: actor.id },
+        data: { groupId: group.id },
+      });
+      return group;
+    }
     return this.prisma.group.create({
       data: { name: dto.name.trim() },
       include: { members: { include: { member: true } } },
     });
   }
 
-  async updateGroup(id: number, dto: GroupDto) {
+  async updateGroup(id: number, dto: GroupDto, actor?: { role: Role; groupId?: number | null }) {
+    this.assertLeaderGroup(actor || { role: Role.ADMIN }, id);
     const group = await this.prisma.group.findUnique({ where: { id } });
     if (!group) throw new BadRequestException('ምድቡ አልተገኘም');
     return this.prisma.group.update({
@@ -207,7 +322,8 @@ export class CatalogService {
     });
   }
 
-  async deleteGroup(id: number) {
+  async deleteGroup(id: number, actor?: { role: Role; groupId?: number | null }) {
+    this.assertLeaderGroup(actor || { role: Role.ADMIN }, id);
     const loans = await this.prisma.vestmentLoan.count({ where: { groupId: id } });
     if (loans) throw new BadRequestException('ይህ ምድብ ልብስ ወጥቶበታል · ሊወገድ አይችልም');
     await this.prisma.groupMember.deleteMany({ where: { groupId: id } });

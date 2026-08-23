@@ -19,6 +19,7 @@ class S {
   static const error = 'ስህተት ተከስቷል';
   static const superAdmin = 'ዋና አስተዳዳሪ';
   static const admin = 'አስተዳዳሪ';
+  static const classLeader = 'መደብ አስተዳዳሪ';
   static const user = 'ተጠቃሚ';
   static const logout = 'ውጣ';
   static const events = 'በዓላት';
@@ -64,6 +65,9 @@ class S {
   static const difference = 'ልዩነት';
   static const penalty = 'ቅጣት';
   static const bulkIssue = 'ለሁሉም አድል';
+  static const registerParticipants = 'ተሳታፊዎችን መዝግብ';
+  static const eventParticipants = 'የበዓል ተሳታፊዎች';
+  static const issueClothes = 'ልብስ አድል';
   static const apiUrl = 'የሰርቨር አድራሻ';
   static const exportDoc = 'ወደ ሰነድ ላክ';
 
@@ -73,6 +77,8 @@ class S {
         return superAdmin;
       case 'ADMIN':
         return admin;
+      case 'CLASS_LEADER':
+        return classLeader;
       default:
         return user;
     }

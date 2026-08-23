@@ -34,6 +34,7 @@ export class AuthService {
         username: user.username,
         role: user.role,
         memberId: user.memberId,
+        groupId: user.groupId,
       },
     };
   }
@@ -47,6 +48,7 @@ export class AuthService {
         username: true,
         role: true,
         memberId: true,
+        groupId: true,
         isActive: true,
       },
     });

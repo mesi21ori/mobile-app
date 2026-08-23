@@ -30,6 +30,15 @@ class _MoreScreenState extends State<MoreScreen> {
 
   Future<void> _load() async {
     final auth = context.read<AuthState>();
+    if (auth.isClassLeader) {
+      setState(() {
+        departments = [];
+        classes = [];
+        users = [];
+        loading = false;
+      });
+      return;
+    }
     final api = auth.api;
     final calls = [
       api.get('/departments'),
@@ -336,6 +345,7 @@ class _MoreScreenState extends State<MoreScreen> {
                 items: const [
                   DropdownMenuItem(value: 'SUPER_ADMIN', child: Text(S.superAdmin)),
                   DropdownMenuItem(value: 'ADMIN', child: Text(S.admin)),
+                  DropdownMenuItem(value: 'CLASS_LEADER', child: Text(S.classLeader)),
                   DropdownMenuItem(value: 'USER', child: Text(S.user)),
                 ],
                 onChanged: (v) => setS(() => role = v!),

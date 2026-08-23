@@ -17,6 +17,7 @@ export class UsersService {
         username: true,
         role: true,
         memberId: true,
+        groupId: true,
         isActive: true,
         createdAt: true,
       },
@@ -39,6 +40,7 @@ export class UsersService {
         passwordHash,
         role: dto.role,
         memberId: dto.memberId,
+        groupId: dto.groupId,
       },
       select: {
         id: true,
@@ -46,6 +48,7 @@ export class UsersService {
         username: true,
         role: true,
         memberId: true,
+        groupId: true,
         isActive: true,
       },
     });

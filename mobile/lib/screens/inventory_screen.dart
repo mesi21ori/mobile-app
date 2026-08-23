@@ -304,6 +304,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     final intact = l['returnedIntact'];
     final damaged = l['returnedDamaged'];
     final lost = l['returnedLost'];
+    final canCheckin = _admin && returnable && !returned;
     String status;
     if (!returnable) {
       status = 'ለክፍል የወጣ · አይመለስም';
@@ -313,24 +314,46 @@ class _InventoryScreenState extends State<InventoryScreen> {
       status = 'ያልተመለሰ · መመለስ አለበት';
     }
     return SoftCard(
-      child: ListTile(
-        title: Text('${l['asset']?['name'] ?? ''} × ${l['quantity']}', style: const TextStyle(fontWeight: FontWeight.w800)),
-        subtitle: Text(
-          '${l['department']?['name'] ?? l['member']?['fullName'] ?? ''}\n'
-          'የወጣበት: ${EthDate.format(l['issuedDate'])}'
-          '${returned && l['returnedDate'] != null ? ' · ተመለሰ: ${EthDate.format(l['returnedDate'])}' : ''}\n'
-          '$status',
-        ),
-        isThreeLine: true,
-        trailing: _admin && returnable && !returned
-            ? FilledButton(
-                onPressed: () => _checkin(l),
-                child: const Text(S.checkin),
-              )
-            : Text(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${l['asset']?['name'] ?? ''} × ${l['quantity']}',
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              l['department']?['name'] ?? l['member']?['fullName'] ?? '',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'የወጣበት: ${EthDate.format(l['issuedDate'])}'
+              '${returned && l['returnedDate'] != null ? ' · ተመለሰ: ${EthDate.format(l['returnedDate'])}' : ''}',
+              style: const TextStyle(color: AppTheme.muted, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 4),
+            Text(status, style: const TextStyle(color: AppTheme.muted, fontWeight: FontWeight.w600)),
+            if (canCheckin) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () => _checkin(l),
+                  child: const Text(S.checkin),
+                ),
+              ),
+            ] else if (!canCheckin) ...[
+              const SizedBox(height: 8),
+              Text(
                 returned ? 'ታሪክ' : (returnable ? 'ያልተመለሰ' : 'የወጣ'),
                 style: const TextStyle(color: AppTheme.muted, fontWeight: FontWeight.w700),
               ),
+            ],
+          ],
+        ),
       ),
     );
   }

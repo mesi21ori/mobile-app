@@ -107,3 +107,14 @@ export class AddGroupMembersDto {
   @IsInt({ each: true })
   memberIds: number[];
 }
+
+export class SetEventParticipantsDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  groupId?: number;
+
+  @IsArray()
+  @IsInt({ each: true })
+  memberIds: number[];
+}

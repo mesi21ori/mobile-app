@@ -1,5 +1,7 @@
-import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, MinLength } from 'class-validator';
 import { Role } from '@prisma/client';
+
+const ROLES = ['SUPER_ADMIN', 'ADMIN', 'CLASS_LEADER', 'USER'] as const;
 
 export class CreateUserDto {
   @IsString()
@@ -12,12 +14,16 @@ export class CreateUserDto {
   @MinLength(6)
   password: string;
 
-  @IsEnum(Role)
+  @IsIn(ROLES)
   role: Role;
 
   @IsOptional()
   @IsInt()
   memberId?: number;
+
+  @IsOptional()
+  @IsInt()
+  groupId?: number;
 }
 
 export class UpdateUserDto {
@@ -30,10 +36,14 @@ export class UpdateUserDto {
   password?: string;
 
   @IsOptional()
-  @IsEnum(Role)
+  @IsIn(ROLES)
   role?: Role;
 
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  groupId?: number;
 }

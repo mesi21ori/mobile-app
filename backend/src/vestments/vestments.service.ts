@@ -38,6 +38,13 @@ export class VestmentsService {
     });
   }
 
+  private async assertParticipant(eventId: number, groupId: number, memberId: number) {
+    const row = await this.prisma.eventParticipant.findUnique({
+      where: { eventId_groupId_memberId: { eventId, groupId, memberId } },
+    });
+    if (!row) throw new BadRequestException('ተማሪው ለዚህ በዓል አልተመዘገበም · መደብ አስተዳዳሪው ይመድቡ');
+  }
+
   async issue(dto: IssueVestmentDto) {
     const eventId = Number(dto.eventId);
     const groupId = Number(dto.groupId);
@@ -52,10 +59,7 @@ export class VestmentsService {
 
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new BadRequestException('በዓሉ አልተገኘም');
-    const inClass = await this.prisma.groupMember.findUnique({
-      where: { groupId_memberId: { groupId, memberId } },
-    });
-    if (!inClass) throw new BadRequestException('ተማሪው በዚህ ምድብ ውስጥ የለም');
+    await this.assertParticipant(eventId, groupId, memberId);
 
     const created: any[] = [];
     for (const vestmentId of vestmentIds) {
@@ -96,17 +100,19 @@ export class VestmentsService {
     if (![eventId, groupId].every((id) => Number.isInteger(id)) || vestmentIds.length === 0) {
       throw new BadRequestException('ትክክለኛ መረጃ ያስገቡ');
     }
-    const members = await this.prisma.groupMember.findMany({
-      where: { groupId },
+    const participants = await this.prisma.eventParticipant.findMany({
+      where: { eventId, groupId },
     });
-    if (members.length === 0) throw new BadRequestException('በምድቡ ውስጥ አባል የለም');
+    if (participants.length === 0) {
+      throw new BadRequestException('ለዚህ በዓል በመደቡ ውስጥ የተመዘገቡ ተማሪዎች የለም');
+    }
     const results: any[] = [];
-    for (const gm of members) {
+    for (const p of participants) {
       results.push(
         ...(await this.issue({
           eventId,
           groupId,
-          memberId: gm.memberId,
+          memberId: p.memberId,
           vestmentIds,
         })),
       );

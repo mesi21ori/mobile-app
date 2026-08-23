@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -10,6 +10,7 @@ import {
   EventDto,
   GroupDto,
   MemberDto,
+  SetEventParticipantsDto,
   UpdateDepartmentDto,
   UpdateEventDto,
   UpdateMemberDto,
@@ -56,21 +57,21 @@ export class CatalogController {
   }
 
   @Post('members')
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  createMember(@Body() dto: MemberDto) {
-    return this.catalog.createMember(dto);
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.CLASS_LEADER)
+  createMember(@Body() dto: MemberDto, @Req() req) {
+    return this.catalog.createMember(dto, req.user);
   }
 
   @Patch('members/:id')
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  updateMember(@Param('id') id: string, @Body() dto: UpdateMemberDto) {
-    return this.catalog.updateMember(+id, dto);
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.CLASS_LEADER)
+  updateMember(@Param('id') id: string, @Body() dto: UpdateMemberDto, @Req() req) {
+    return this.catalog.updateMember(+id, dto, req.user);
   }
 
   @Delete('members/:id')
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  deleteMember(@Param('id') id: string) {
-    return this.catalog.deleteMember(+id);
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.CLASS_LEADER)
+  deleteMember(@Param('id') id: string, @Req() req) {
+    return this.catalog.deleteMember(+id, req.user);
   }
 
   @Get('vestments')
@@ -102,7 +103,7 @@ export class CatalogController {
   }
 
   @Post('events')
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.CLASS_LEADER)
   createEvent(@Body() dto: EventDto) {
     return this.catalog.createEvent(dto);
   }
@@ -119,27 +120,38 @@ export class CatalogController {
     return this.catalog.deleteEvent(+id);
   }
 
+  @Get('events/:id/participants')
+  eventParticipants(@Param('id') id: string, @Req() req) {
+    return this.catalog.eventParticipants(+id, req.user);
+  }
+
+  @Put('events/:id/participants')
+  @Roles(Role.CLASS_LEADER)
+  setEventParticipants(@Param('id') id: string, @Body() dto: SetEventParticipantsDto, @Req() req) {
+    return this.catalog.setEventParticipants(+id, dto, req.user);
+  }
+
   @Get('groups')
-  groups() {
-    return this.catalog.groups();
+  groups(@Req() req) {
+    return this.catalog.groups(req.user);
   }
 
   @Post('groups')
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  createGroup(@Body() dto: GroupDto) {
-    return this.catalog.createGroup(dto);
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.CLASS_LEADER)
+  createGroup(@Body() dto: GroupDto, @Req() req) {
+    return this.catalog.createGroup(dto, req.user);
   }
 
   @Patch('groups/:id')
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  updateGroup(@Param('id') id: string, @Body() dto: GroupDto) {
-    return this.catalog.updateGroup(+id, dto);
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.CLASS_LEADER)
+  updateGroup(@Param('id') id: string, @Body() dto: GroupDto, @Req() req) {
+    return this.catalog.updateGroup(+id, dto, req.user);
   }
 
   @Delete('groups/:id')
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
-  deleteGroup(@Param('id') id: string) {
-    return this.catalog.deleteGroup(+id);
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.CLASS_LEADER)
+  deleteGroup(@Param('id') id: string, @Req() req) {
+    return this.catalog.deleteGroup(+id, req.user);
   }
 
   @Post('groups/members')

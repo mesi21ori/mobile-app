@@ -94,9 +94,26 @@ class _VestmentsScreenState extends State<VestmentsScreen> {
     _load();
   }
 
+  int _studentCountFrom(dynamic g) => ((g['members'] as List?) ?? []).length;
+
   Future<void> _load() async {
-    final api = context.read<AuthState>().api;
+    final auth = context.read<AuthState>();
+    final api = auth.api;
     try {
+      if (auth.isClassLeader) {
+        final results = await Future.wait([
+          api.get('/groups'),
+          api.get('/events'),
+        ]);
+        setState(() {
+          classes = results[0];
+          events = results[1];
+          vestments = [];
+          unreturned = [];
+          loading = false;
+        });
+        return;
+      }
       final results = await Future.wait([
         api.get('/vestments'),
         api.get('/groups'),
@@ -118,7 +135,10 @@ class _VestmentsScreenState extends State<VestmentsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final admin = context.watch<AuthState>().isAdmin;
+    final auth = context.watch<AuthState>();
+    final admin = auth.isAdmin;
+    final canManageClass = auth.canManageClass;
+    final canAddClass = admin || (auth.isClassLeader && auth.groupId == null);
     if (loading) return const LoadingView();
     final section = widget.section;
     if (section == VestmentsSection.dirty) {
@@ -139,22 +159,32 @@ class _VestmentsScreenState extends State<VestmentsScreen> {
       onRefresh: _load,
       child: ListView(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-            child: ReportDoc.button(_exportClothes),
-          ),
+          if (!auth.isClassLeader)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+              child: ReportDoc.button(_exportClothes),
+            ),
           if (section == VestmentsSection.classes) ...[
-            if (admin)
+            if (canAddClass)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                 child: FilledButton.icon(
                   onPressed: _addClass,
                   icon: const Icon(Icons.add_rounded),
-                  label: const Text(S.addClass),
+                  label: Text(auth.isClassLeader ? 'መደብ ፍጠር' : S.addClass),
                 ),
               ),
             const SectionHeader(S.classes),
-            if (classes.isEmpty) const EmptyBox('መጀመሪያ ምድብ ይፍጠሩ፤ ከዚያ አባላትን ያክሉ'),
+            if (classes.isEmpty)
+              EmptyBox(auth.isClassLeader ? 'መጀመሪያ መደብዎን ይፍጠሩ' : 'መጀመሪያ ምድብ ይፍጠሩ፤ ከዚያ አባላትን ያክሉ'),
+            if (auth.isClassLeader && classes.length == 1)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Text(
+                  '${classes.first['name'] ?? ''} · $_studentCountFrom(classes.first) ተማሪ',
+                  style: const TextStyle(color: AppTheme.muted, fontWeight: FontWeight.w600),
+                ),
+              ),
             ...classes.asMap().entries.map((entry) {
               final g = entry.value;
               final count = ((g['members'] as List?) ?? []).length;
@@ -172,7 +202,7 @@ class _VestmentsScreenState extends State<VestmentsScreen> {
                     ),
                     title: Text(g['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.w800)),
                     subtitle: Text('$count አባላት'),
-                    trailing: admin
+                    trailing: canManageClass
                         ? PopupMenuButton<String>(
                             onSelected: (v) {
                               if (v == 'edit') _editClass(g);
@@ -190,13 +220,22 @@ class _VestmentsScreenState extends State<VestmentsScreen> {
             }),
           ],
           if (section == VestmentsSection.events) ...[
-            SectionHeader(
-              S.events,
-              action: admin
-                  ? TextButton.icon(onPressed: _addEvent, icon: const Icon(Icons.add_rounded), label: const Text(S.add))
-                  : null,
-            ),
-            if (events.isEmpty) const EmptyBox('ምድብ ከጨረሱ በኋላ በዓል ይፍጠሩ'),
+            if (auth.canCreateEvent)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: FilledButton.icon(
+                  onPressed: _addEvent,
+                  icon: const Icon(Icons.event_rounded),
+                  label: const Text('በዓል ፍጠር'),
+                ),
+              ),
+            SectionHeader(S.events),
+            if (events.isEmpty)
+              EmptyBox(
+                auth.isClassLeader
+                    ? 'በዓል ፍጠር · ከዚያ ተማሪዎችን ለበዓሉ ይመድቡ'
+                    : 'በዓል ፍጠር · መደብ አስተዳዳሪዎች ተሳታፊዎችን ይመድቡ',
+              ),
             ...events.map((e) => SoftCard(
                   onTap: () => Navigator.push(
                     context,
@@ -208,8 +247,12 @@ class _VestmentsScreenState extends State<VestmentsScreen> {
                       child: Icon(Icons.event_rounded, color: AppTheme.seed),
                     ),
                     title: Text(e['name'], style: const TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: Text('መውጫ: ${EthDate.format(e['issueDate'])}\nመመለሻ: ${EthDate.format(e['dueDate'])}'),
-                    isThreeLine: true,
+                    subtitle: Text(
+                      auth.isClassLeader
+                          ? 'መውጫ: ${EthDate.format(e['issueDate'])} · ${S.registerParticipants}'
+                          : 'መውጫ: ${EthDate.format(e['issueDate'])}\nመመለሻ: ${EthDate.format(e['dueDate'])} · ልብስ አድል',
+                    ),
+                    isThreeLine: !auth.isClassLeader,
                     trailing: admin
                         ? PopupMenuButton<String>(
                             onSelected: (v) {
@@ -275,6 +318,7 @@ class _VestmentsScreenState extends State<VestmentsScreen> {
     );
     if (ok == true && name.text.trim().isNotEmpty) {
       final created = await context.read<AuthState>().api.post('/groups', {'name': name.text.trim()});
+      await context.read<AuthState>().refreshUser();
       if (!mounted) return;
       await Navigator.push(
         context,
@@ -315,8 +359,9 @@ class _VestmentsScreenState extends State<VestmentsScreen> {
   }
 
   Future<void> _addEvent() async {
-    if (classes.isEmpty) {
-      showMsg(context, 'መጀመሪያ ምድብና አባላት ይፍጠሩ', error: true);
+    final auth = context.read<AuthState>();
+    if (auth.isClassLeader && auth.groupId == null) {
+      showMsg(context, 'መጀመሪያ መደብዎን ይፍጠሩ', error: true);
       return;
     }
     final name = TextEditingController();
@@ -613,14 +658,15 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final admin = context.watch<AuthState>().isAdmin;
+    final auth = context.watch<AuthState>();
+    final canManageClass = auth.canManageClass;
     final members = ((group?['members'] as List?) ?? [])
         .map((gm) => gm is Map ? (gm['member'] ?? gm) : null)
         .whereType<Map>()
         .toList();
     return Scaffold(
       appBar: AppBar(title: Text(group?['name'] ?? S.classes)),
-      floatingActionButton: admin
+      floatingActionButton: canManageClass
           ? FloatingActionButton.extended(
               onPressed: _addMember,
               icon: const Icon(Icons.person_add_alt),
@@ -631,7 +677,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
           ? const LoadingView()
           : Column(
               children: [
-                if (admin)
+                if (canManageClass)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                     child: FilledButton.icon(
@@ -657,7 +703,7 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
                                   ),
                                   title: Text(m['fullName'] ?? '', style: const TextStyle(fontWeight: FontWeight.w700)),
                                   subtitle: Text(m['phoneNumber'] ?? ''),
-                                  trailing: admin
+                                  trailing: canManageClass
                                       ? PopupMenuButton<String>(
                                           onSelected: (v) {
                                             if (v == 'edit') _editMember(m);
@@ -775,9 +821,13 @@ class EventIssuePage extends StatefulWidget {
 }
 
 class _EventIssuePageState extends State<EventIssuePage> {
-  List classes = [];
+  List participantGroups = [];
   List vestments = [];
+  List classMembers = [];
+  Map? myGroup;
+  final selected = <int>{};
   bool loading = true;
+  bool saving = false;
 
   @override
   void initState() {
@@ -786,96 +836,238 @@ class _EventIssuePageState extends State<EventIssuePage> {
   }
 
   Future<void> _load() async {
-    final api = context.read<AuthState>().api;
-    final res = await Future.wait([api.get('/groups'), api.get('/vestments')]);
+    final auth = context.read<AuthState>();
+    final api = auth.api;
+    final eventId = jsonInt(widget.event['id']);
+    if (auth.isClassLeader) {
+      final res = await Future.wait([
+        api.get('/groups'),
+        api.get('/events/$eventId/participants'),
+      ]);
+      final groups = (res[0] as List?) ?? [];
+      final parts = (res[1] as List?) ?? [];
+      final group = groups.isNotEmpty ? Map<String, dynamic>.from(groups.first as Map) : null;
+      final members = group == null
+          ? <Map>[]
+          : ((group['members'] as List?) ?? [])
+              .map((gm) => gm is Map ? Map<String, dynamic>.from((gm['member'] ?? gm) as Map) : null)
+              .whereType<Map>()
+              .toList();
+      final registered = parts.isNotEmpty
+          ? ((parts.first as Map)['members'] as List?)?.map((m) => jsonInt(m['id'])).whereType<int>().toSet() ?? {}
+          : <int>{};
+      setState(() {
+        myGroup = group;
+        classMembers = members;
+        participantGroups = parts;
+        selected
+          ..clear()
+          ..addAll(registered);
+        loading = false;
+      });
+      return;
+    }
+    final res = await Future.wait([
+      api.get('/events/$eventId/participants'),
+      api.get('/vestments'),
+    ]);
     setState(() {
-      classes = res[0];
-      vestments = res[1];
+      participantGroups = (res[0] as List?) ?? [];
+      vestments = (res[1] as List?) ?? [];
       loading = false;
     });
   }
 
+  Future<void> _saveParticipants() async {
+    final auth = context.read<AuthState>();
+    if (auth.groupId == null) {
+      showMsg(context, 'መጀመሪያ መደብ ይፍጠሩ', error: true);
+      return;
+    }
+    setState(() => saving = true);
+    try {
+      await auth.api.put('/events/${jsonInt(widget.event['id'])}/participants', {
+        'memberIds': selected.toList(),
+      });
+      if (mounted) showMsg(context, S.success);
+      await _load();
+    } catch (e) {
+      if (mounted) showMsg(context, e.toString(), error: true);
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthState>();
+    if (loading) {
+      return Scaffold(appBar: AppBar(title: Text(widget.event['name'] ?? '')), body: const LoadingView());
+    }
+    if (auth.isClassLeader) return _classLeaderBody(auth);
+    return _adminBody();
+  }
+
+  Widget _classLeaderBody(AuthState auth) {
+    if (auth.groupId == null || myGroup == null) {
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.event['name'] ?? '')),
+        body: const EmptyBox('መጀመሪያ መደብ ይፍጠሩ · ከዚያ ተማሪዎችን ያክሉ'),
+      );
+    }
     return Scaffold(
       appBar: AppBar(title: Text(widget.event['name'] ?? '')),
-      body: loading
-          ? const LoadingView()
-          : ListView(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                  child: Text(
-                    'ምድብ ይምረጡ፤ ከዚያ ለአንድ ተማሪ ወይም ለሁሉም ልብስ ይስጡ',
-                    style: TextStyle(color: AppTheme.muted, fontWeight: FontWeight.w600),
-                  ),
-                ),
-                if (classes.isEmpty) const EmptyBox('ምድብ የለም'),
-                ...classes.map((g) {
-                  final count = ((g['members'] as List?) ?? []).length;
-                  return SoftCard(
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ClassIssuePage(event: widget.event, group: g, vestments: vestments),
-                      ),
-                    ).then((_) => _load()),
-                    child: ListTile(
-                      title: Text(g['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.w800)),
-                      subtitle: Text('$count ተማሪዎች'),
-                      trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.seed),
-                    ),
-                  );
-                }),
-              ],
+      floatingActionButton: classMembers.isEmpty
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: saving ? null : _saveParticipants,
+              icon: saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.how_to_reg_rounded),
+              label: const Text(S.registerParticipants),
             ),
+      body: ListView(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Text(
+              '${myGroup?['name'] ?? ''} · ለበዓሉ የሚሳተፉ ተማሪዎችን ይምረጡ',
+              style: const TextStyle(color: AppTheme.muted, fontWeight: FontWeight.w600),
+            ),
+          ),
+          if (classMembers.isEmpty) const EmptyBox('ተማሪ የለም · በመደብ ገጽ ተማሪ ያክሉ'),
+          ...classMembers.map((m) {
+            final id = jsonInt(m['id']);
+            if (id == null) return const SizedBox.shrink();
+            final on = selected.contains(id);
+            return SoftCard(
+              child: CheckboxListTile(
+                value: on,
+                title: Text(m['fullName'] ?? '', style: const TextStyle(fontWeight: FontWeight.w700)),
+                subtitle: Text(m['phoneNumber']?.toString() ?? ''),
+                onChanged: (v) => setState(() {
+                  if (v == true) {
+                    selected.add(id);
+                  } else {
+                    selected.remove(id);
+                  }
+                }),
+              ),
+            );
+          }),
+          if (classMembers.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: FilledButton.icon(
+                onPressed: saving ? null : _saveParticipants,
+                icon: const Icon(Icons.save_rounded),
+                label: Text('${S.registerParticipants} (${selected.length})'),
+              ),
+            ),
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
+  Widget _adminBody() {
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.event['name'] ?? '')),
+      body: ListView(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Text(
+              'በመደብ የተመዘገቡ ተሳታፊዎች · ልብስ ይስጡ',
+              style: TextStyle(color: AppTheme.muted, fontWeight: FontWeight.w600),
+            ),
+          ),
+          if (participantGroups.isEmpty) const EmptyBox('እስካሁን ምንም መደብ ተሳታፊ አልመዘገበም · መደብ አስተዳዳሪዎች ይመድቡ'),
+          ...participantGroups.map((g) {
+            final group = Map<String, dynamic>.from(g['group'] as Map? ?? {});
+            final members = ((g['members'] as List?) ?? []).map((m) => Map<String, dynamic>.from(m as Map)).toList();
+            return SoftCard(
+              onTap: members.isEmpty
+                  ? null
+                  : () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ClassIssuePage(
+                            event: widget.event,
+                            group: group,
+                            vestments: vestments,
+                            participants: members,
+                          ),
+                        ),
+                      ).then((_) => _load()),
+              child: ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: AppTheme.blueSoft,
+                  child: Icon(Icons.groups_rounded, color: AppTheme.seed),
+                ),
+                title: Text(group['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.w800)),
+                subtitle: Text('${members.length} ተሳታፊ ተማሪዎች'),
+                trailing: members.isEmpty
+                    ? null
+                    : const Icon(Icons.chevron_right_rounded, color: AppTheme.seed),
+              ),
+            );
+          }),
+          const SizedBox(height: 24),
+        ],
+      ),
     );
   }
 }
 
 class ClassIssuePage extends StatelessWidget {
-  const ClassIssuePage({super.key, required this.event, required this.group, required this.vestments});
+  const ClassIssuePage({
+    super.key,
+    required this.event,
+    required this.group,
+    required this.vestments,
+    required this.participants,
+  });
   final Map event;
   final Map group;
   final List vestments;
+  final List<Map<String, dynamic>> participants;
 
   @override
   Widget build(BuildContext context) {
-    final admin = context.watch<AuthState>().isAdmin;
-    final members = ((group['members'] as List?) ?? [])
-        .map((gm) => gm is Map ? (gm['member'] ?? gm) : null)
-        .whereType<Map>()
-        .toList();
+    final canManageVestments = context.watch<AuthState>().canManageVestments;
     return Scaffold(
       appBar: AppBar(title: Text(group['name'] ?? '')),
-      floatingActionButton: admin && members.isNotEmpty
+      floatingActionButton: canManageVestments && participants.isNotEmpty
           ? FloatingActionButton.extended(
               onPressed: () => _issue(context, bulk: true),
               icon: const Icon(Icons.groups_3_rounded),
               label: const Text(S.bulkIssue),
             )
           : null,
-      body: members.isEmpty
-          ? const EmptyBox('በምድቡ ውስጥ አባል የለም')
+      body: participants.isEmpty
+          ? const EmptyBox('ለዚህ በዓል ተሳታፊ ተማሪ የለም')
           : ListView(
               children: [
-                const SectionHeader('ተማሪ ምረጡ · ልብስ ይስጡ ወይም ይመልሱ'),
-                ...members.map((m) => SoftCard(
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => MemberLoansPage(
-                            event: event,
-                            group: group,
-                            member: m,
-                            vestments: vestments,
-                          ),
-                        ),
-                      ),
+                const SectionHeader('ተሳታፊ ተማሪዎች · ልብስ ይስጡ'),
+                ...participants.map((m) => SoftCard(
+                      onTap: canManageVestments
+                          ? () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => MemberLoansPage(
+                                    event: event,
+                                    group: group,
+                                    member: m,
+                                    vestments: vestments,
+                                  ),
+                                ),
+                              )
+                          : null,
                       child: ListTile(
                         title: Text(m['fullName'] ?? '', style: const TextStyle(fontWeight: FontWeight.w700)),
-                        subtitle: const Text('ልብስ 1፣ ልብስ 2፣ … ስጥ / መልስ'),
-                        trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.seed),
+                        subtitle: const Text(S.issueClothes),
+                        trailing: canManageVestments
+                            ? const Icon(Icons.chevron_right_rounded, color: AppTheme.seed)
+                            : null,
                       ),
                     )),
               ],
@@ -935,10 +1127,10 @@ class _MemberLoansPageState extends State<MemberLoansPage> {
 
   @override
   Widget build(BuildContext context) {
-    final admin = context.watch<AuthState>().isAdmin;
+    final canManageVestments = context.watch<AuthState>().canManageVestments;
     return Scaffold(
       appBar: AppBar(title: Text(widget.member['fullName'] ?? '')),
-      floatingActionButton: admin
+      floatingActionButton: canManageVestments
           ? FloatingActionButton.extended(
               onPressed: _issueOne,
               label: const Text(S.issue),
@@ -968,7 +1160,7 @@ class _MemberLoansPageState extends State<MemberLoansPage> {
                               if (dirty) const Text('ቆሽሏል · እስኪታጠብ ድረስ አይመለስም', style: TextStyle(color: Color(0xFFB45309), fontWeight: FontWeight.w700)),
                               if ((l['penaltyAmount'] ?? 0).toString() != '0' && (l['penaltyAmount'] ?? '0') != '0.00')
                                 Text('${S.penalty}: ${l['penaltyAmount']} ብር', style: const TextStyle(color: Colors.red)),
-                              if (admin && !returned) ...[
+                              if (canManageVestments && !returned) ...[
                                 CheckboxListTile(
                                   contentPadding: EdgeInsets.zero,
                                   controlAffinity: ListTileControlAffinity.leading,
