@@ -20,20 +20,14 @@ import {
 export class CatalogService {
   constructor(private prisma: PrismaService) {}
 
-  private assertLeaderGroup(actor: { role: Role; groupId?: number | null }, groupId: number) {
-    if (actor.role !== Role.CLASS_LEADER) return;
-    if (!actor.groupId || actor.groupId !== groupId) {
-      throw new BadRequestException('በዚህ ምድብ ላይ ፈቃድ የለዎትም');
-    }
+  private assertLeaderGroup(_actor: { role: Role; groupId?: number | null }, _groupId: number) {
+    // Class leaders may manage any መደብ (including ones created by super admin).
   }
 
   private async assertMemberInLeaderGroup(actor: { role: Role; groupId?: number | null }, memberId: number) {
     if (actor.role !== Role.CLASS_LEADER) return;
-    if (!actor.groupId) throw new BadRequestException('መጀመሪያ ምድብ ይፍጠሩ');
-    const link = await this.prisma.groupMember.findUnique({
-      where: { groupId_memberId: { groupId: actor.groupId, memberId } },
-    });
-    if (!link) throw new BadRequestException('ይህ ተማሪ በምድብዎ ውስጥ የለም');
+    const link = await this.prisma.groupMember.findFirst({ where: { memberId } });
+    if (!link) throw new BadRequestException('ይህ ተማሪ በምድብ ውስጥ የለም');
   }
 
   departments() {
@@ -79,8 +73,7 @@ export class CatalogService {
   async createMember(dto: MemberDto, actor?: { role: Role; groupId?: number | null }) {
     let groupId = dto.groupId;
     if (actor?.role === Role.CLASS_LEADER) {
-      if (!actor.groupId) throw new BadRequestException('መጀመሪያ ምድብ ይፍጠሩ');
-      groupId = actor.groupId;
+      if (!groupId) throw new BadRequestException('መደብ ይምረጡ');
     }
     const phoneNumber = assertEthPhone(dto.phoneNumber, true);
     const member = await this.prisma.member.create({
@@ -216,14 +209,9 @@ export class CatalogService {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new BadRequestException('በዓሉ አልተገኘም');
 
-    const where: { eventId: number; groupId?: number } = { eventId };
-    if (actor?.role === Role.CLASS_LEADER) {
-      if (!actor.groupId) return [];
-      where.groupId = actor.groupId;
-    }
-
+    // Class leaders see all መደብ participants (same as admin).
     const rows = await this.prisma.eventParticipant.findMany({
-      where,
+      where: { eventId },
       include: {
         group: true,
         member: true,
@@ -253,13 +241,8 @@ export class CatalogService {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new BadRequestException('በዓሉ አልተገኘም');
 
-    let groupId = dto.groupId;
-    if (actor.role === Role.CLASS_LEADER) {
-      if (!actor.groupId) throw new BadRequestException('መጀመሪያ መደብ ይፍጠሩ');
-      groupId = actor.groupId;
-    } else if (!groupId) {
-      throw new BadRequestException('መደብ ይምረጡ');
-    }
+    const groupId = dto.groupId ?? (actor.role === Role.CLASS_LEADER ? actor.groupId : undefined);
+    if (!groupId) throw new BadRequestException('መደብ ይምረጡ');
 
     const memberIds = [...new Set((dto.memberIds || []).map((id) => Number(id)).filter((id) => Number.isInteger(id)))];
     if (memberIds.length) {
@@ -282,13 +265,9 @@ export class CatalogService {
     return this.eventParticipants(eventId, actor);
   }
 
-  groups(actor?: { role: Role; groupId?: number | null }) {
-    if (actor?.role === Role.CLASS_LEADER && !actor.groupId) {
-      return Promise.resolve([]);
-    }
-    const where = actor?.role === Role.CLASS_LEADER && actor.groupId ? { id: actor.groupId } : undefined;
+  groups(_actor?: { role: Role; groupId?: number | null }) {
+    // Class leaders see every መደብ, including those created by super admin.
     return this.prisma.group.findMany({
-      where,
       include: {
         members: { include: { member: true } },
       },
@@ -297,22 +276,18 @@ export class CatalogService {
   }
 
   async createGroup(dto: GroupDto, actor?: { id: number; role: Role; groupId?: number | null }) {
-    if (actor?.role === Role.CLASS_LEADER) {
-      if (actor.groupId) throw new BadRequestException('አስቀድመው ምድብ አለዎት');
-      const group = await this.prisma.group.create({
-        data: { name: dto.name.trim() },
-        include: { members: { include: { member: true } } },
-      });
+    const group = await this.prisma.group.create({
+      data: { name: dto.name.trim() },
+      include: { members: { include: { member: true } } },
+    });
+    // Keep a default groupId for class leaders who had none (optional convenience).
+    if (actor?.role === Role.CLASS_LEADER && !actor.groupId) {
       await this.prisma.user.update({
         where: { id: actor.id },
         data: { groupId: group.id },
       });
-      return group;
     }
-    return this.prisma.group.create({
-      data: { name: dto.name.trim() },
-      include: { members: { include: { member: true } } },
-    });
+    return group;
   }
 
   async updateGroup(id: number, dto: GroupDto, actor?: { role: Role; groupId?: number | null }) {
@@ -358,9 +333,6 @@ export class CatalogService {
     const memberWhere: any = {
       fullName: { contains: term, mode: 'insensitive' },
     };
-    if (actor?.role === Role.CLASS_LEADER && actor.groupId) {
-      memberWhere.groupMembers = { some: { groupId: actor.groupId } };
-    }
 
     const eventWhere: any = { name: { contains: term, mode: 'insensitive' } };
 
@@ -391,16 +363,11 @@ export class CatalogService {
             include: { member: true, vestment: true, event: true, group: true },
             orderBy: { id: 'desc' },
           }),
-      actor?.role === Role.CLASS_LEADER
-        ? this.prisma.group.findMany({
-            where: { id: actor.groupId ?? -1, name: { contains: term, mode: 'insensitive' } },
-            take: 10,
-          })
-        : this.prisma.group.findMany({
-            where: { name: { contains: term, mode: 'insensitive' } },
-            take: 10,
-            orderBy: { name: 'asc' },
-          }),
+      this.prisma.group.findMany({
+        where: { name: { contains: term, mode: 'insensitive' } },
+        take: 10,
+        orderBy: { name: 'asc' },
+      }),
       this.prisma.event.findMany({
         where: eventWhere,
         take: 15,

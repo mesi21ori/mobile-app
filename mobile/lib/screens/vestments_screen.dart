@@ -109,8 +109,6 @@ class _VestmentsScreenState extends State<VestmentsScreen> {
     _load();
   }
 
-  int _studentCountFrom(dynamic g) => ((g['members'] as List?) ?? []).length;
-
   Future<void> _load() async {
     final auth = context.read<AuthState>();
     final api = auth.api;
@@ -153,7 +151,8 @@ class _VestmentsScreenState extends State<VestmentsScreen> {
     final auth = context.watch<AuthState>();
     final admin = auth.isAdmin;
     final canManageClass = auth.canManageClass;
-    final canAddClass = admin || (auth.isClassLeader && auth.groupId == null);
+    // Class leaders can always create more መደብ (and see all of them).
+    final canAddClass = admin || auth.isClassLeader;
     if (loading) return const LoadingView();
     final section = widget.section;
     if (section == VestmentsSection.dirty) {
@@ -191,12 +190,12 @@ class _VestmentsScreenState extends State<VestmentsScreen> {
               ),
             const SectionHeader(S.classes),
             if (classes.isEmpty)
-              EmptyBox(auth.isClassLeader ? 'መጀመሪያ መደብዎን ይፍጠሩ' : 'መጀመሪያ ምድብ ይፍጠሩ፤ ከዚያ አባላትን ያክሉ'),
-            if (auth.isClassLeader && classes.length == 1)
+              EmptyBox(auth.isClassLeader ? 'መጀመሪያ መደብ ይፍጠሩ ወይም ከዝርዝሩ ይምረጡ' : 'መጀመሪያ ምድብ ይፍጠሩ፤ ከዚያ አባላትን ያክሉ'),
+            if (auth.isClassLeader && classes.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                 child: Text(
-                  '${classes.first['name'] ?? ''} · ${_studentCountFrom(classes.first)} ተማሪ',
+                  '${classes.length} መደብ · ተማሪ ለመጨመር መደብ ይጫኑ',
                   style: const TextStyle(color: AppTheme.muted, fontWeight: FontWeight.w600),
                 ),
               ),
@@ -323,25 +322,36 @@ class _VestmentsScreenState extends State<VestmentsScreen> {
     final name = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text(S.addClass),
-        content: TextField(controller: name, decoration: const InputDecoration(labelText: 'የምድብ ስም')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text(S.cancel)),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text(S.save)),
-        ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          title: Text(context.read<AuthState>().isClassLeader ? 'መደብ ፍጠር' : S.addClass),
+          content: TextField(
+            controller: name,
+            decoration: const InputDecoration(labelText: 'የምድብ ስም'),
+            onChanged: (_) => setS(() {}),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text(S.cancel)),
+            FilledButton(
+              onPressed: name.text.trim().isEmpty ? null : () => Navigator.pop(ctx, true),
+              child: const Text(S.save),
+            ),
+          ],
+        ),
       ),
     );
-    if (ok == true && name.text.trim().isNotEmpty) {
-      final created = await context.read<AuthState>().api.post('/groups', {'name': name.text.trim()});
-      await context.read<AuthState>().refreshUser();
-      if (!mounted) return;
-      await Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => ClassDetailPage(group: created)),
-      );
-      _load();
+    if (ok != true || name.text.trim().isEmpty) {
+      if (ok == true && mounted) showMsg(context, 'ስም ያስፈልጋል', error: true);
+      return;
     }
+    final created = await context.read<AuthState>().api.post('/groups', {'name': name.text.trim()});
+    await context.read<AuthState>().refreshUser();
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => ClassDetailPage(group: created)),
+    );
+    _load();
   }
 
   Future<void> _addVestment() async {
@@ -375,11 +385,6 @@ class _VestmentsScreenState extends State<VestmentsScreen> {
   }
 
   Future<void> _addEvent() async {
-    final auth = context.read<AuthState>();
-    if (auth.isClassLeader && auth.groupId == null) {
-      showMsg(context, 'መጀመሪያ መደብዎን ይፍጠሩ', error: true);
-      return;
-    }
     final name = TextEditingController();
     DateTime issue = DateTime.now();
     DateTime due = DateTime.now().add(const Duration(days: 7));
@@ -732,27 +737,45 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
     final phone = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text(S.addStudent),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: name, decoration: const InputDecoration(labelText: 'ሙሉ ስም')),
-            const SizedBox(height: 8),
-            TextField(
-              controller: phone,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'ስልክ', hintText: '0975989898'),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) {
+          final canSave = name.text.trim().isNotEmpty && EthPhone.isValid(phone.text);
+          return AlertDialog(
+            title: const Text(S.addStudent),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: name,
+                  decoration: const InputDecoration(labelText: 'ሙሉ ስም'),
+                  onChanged: (_) => setS(() {}),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: phone,
+                  keyboardType: TextInputType.phone,
+                  inputFormatters: [EthPhoneInputFormatter()],
+                  decoration: const InputDecoration(labelText: 'ስልክ', hintText: '0975989898'),
+                  onChanged: (_) => setS(() {}),
+                ),
+              ],
             ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text(S.cancel)),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text(S.save)),
-        ],
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text(S.cancel)),
+              FilledButton(
+                onPressed: canSave ? () => Navigator.pop(ctx, true) : null,
+                child: const Text(S.save),
+              ),
+            ],
+          );
+        },
       ),
     );
-    if (ok != true || name.text.trim().isEmpty) return;
+    if (ok != true) return;
+    if (name.text.trim().isEmpty) {
+      if (mounted) showMsg(context, 'ስም ያስፈልጋል', error: true);
+      return;
+    }
     final phoneErr = EthPhone.validate(phone.text);
     if (phoneErr != null) {
       if (mounted) showMsg(context, phoneErr, error: true);
@@ -775,27 +798,47 @@ class _ClassDetailPageState extends State<ClassDetailPage> {
     final phone = TextEditingController(text: m['phoneNumber']?.toString() ?? '');
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text(S.edit),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: name, decoration: const InputDecoration(labelText: 'ሙሉ ስም')),
-            const SizedBox(height: 8),
-            TextField(
-              controller: phone,
-              keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: 'ስልክ', hintText: '0975989898'),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) {
+          final phoneText = phone.text.trim();
+          final phoneOk = phoneText.isEmpty || EthPhone.isValid(phoneText);
+          final canSave = name.text.trim().isNotEmpty && phoneOk;
+          return AlertDialog(
+            title: const Text(S.edit),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: name,
+                  decoration: const InputDecoration(labelText: 'ሙሉ ስም'),
+                  onChanged: (_) => setS(() {}),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: phone,
+                  keyboardType: TextInputType.phone,
+                  inputFormatters: [EthPhoneInputFormatter()],
+                  decoration: const InputDecoration(labelText: 'ስልክ', hintText: '0975989898'),
+                  onChanged: (_) => setS(() {}),
+                ),
+              ],
             ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text(S.cancel)),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text(S.save)),
-        ],
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text(S.cancel)),
+              FilledButton(
+                onPressed: canSave ? () => Navigator.pop(ctx, true) : null,
+                child: const Text(S.save),
+              ),
+            ],
+          );
+        },
       ),
     );
-    if (ok != true || name.text.trim().isEmpty) return;
+    if (ok != true) return;
+    if (name.text.trim().isEmpty) {
+      if (mounted) showMsg(context, 'ስም ያስፈልጋል', error: true);
+      return;
+    }
     final phoneErr = EthPhone.validate(phone.text, required: false);
     if (phoneErr != null) {
       if (mounted) showMsg(context, phoneErr, error: true);
@@ -844,8 +887,10 @@ class EventIssuePage extends StatefulWidget {
 class _EventIssuePageState extends State<EventIssuePage> {
   List participantGroups = [];
   List vestments = [];
+  List allGroups = [];
   List classMembers = [];
   Map? myGroup;
+  int? selectedGroupId;
   final selected = <int>{};
   bool loading = true;
   bool saving = false;
@@ -863,6 +908,41 @@ class _EventIssuePageState extends State<EventIssuePage> {
     super.dispose();
   }
 
+  List<Map> _membersOf(Map? group) {
+    if (group == null) return [];
+    return ((group['members'] as List?) ?? [])
+        .map((gm) => gm is Map ? Map<String, dynamic>.from((gm['member'] ?? gm) as Map) : null)
+        .whereType<Map>()
+        .toList();
+  }
+
+  Set<int> _registeredFor(List parts, int? groupId) {
+    if (groupId == null || parts.isEmpty) return {};
+    for (final p in parts) {
+      final g = p is Map ? p['group'] : null;
+      if (g is Map && jsonInt(g['id']) == groupId) {
+        return ((p['members'] as List?) ?? []).map((m) => jsonInt(m['id'])).whereType<int>().toSet();
+      }
+    }
+    return {};
+  }
+
+  void _selectGroup(int? id, {List? parts}) {
+    final group = allGroups.cast<Map?>().firstWhere(
+          (g) => jsonInt(g?['id']) == id,
+          orElse: () => null,
+        );
+    final registered = _registeredFor(parts ?? participantGroups, id);
+    setState(() {
+      selectedGroupId = id;
+      myGroup = group;
+      classMembers = _membersOf(group);
+      selected
+        ..clear()
+        ..addAll(registered);
+    });
+  }
+
   Future<void> _load() async {
     final auth = context.read<AuthState>();
     final api = auth.api;
@@ -874,25 +954,13 @@ class _EventIssuePageState extends State<EventIssuePage> {
       ]);
       final groups = (res[0] as List?) ?? [];
       final parts = (res[1] as List?) ?? [];
-      final group = groups.isNotEmpty ? Map<String, dynamic>.from(groups.first as Map) : null;
-      final members = group == null
-          ? <Map>[]
-          : ((group['members'] as List?) ?? [])
-              .map((gm) => gm is Map ? Map<String, dynamic>.from((gm['member'] ?? gm) as Map) : null)
-              .whereType<Map>()
-              .toList();
-      final registered = parts.isNotEmpty
-          ? ((parts.first as Map)['members'] as List?)?.map((m) => jsonInt(m['id'])).whereType<int>().toSet() ?? {}
-          : <int>{};
+      final preferred = auth.groupId ?? (groups.isNotEmpty ? jsonInt(groups.first['id']) : null);
       setState(() {
-        myGroup = group;
-        classMembers = members;
+        allGroups = groups;
         participantGroups = parts;
-        selected
-          ..clear()
-          ..addAll(registered);
         loading = false;
       });
+      _selectGroup(preferred, parts: parts);
       return;
     }
     final res = await Future.wait([
@@ -907,14 +975,14 @@ class _EventIssuePageState extends State<EventIssuePage> {
   }
 
   Future<void> _saveParticipants() async {
-    final auth = context.read<AuthState>();
-    if (auth.groupId == null) {
-      showMsg(context, 'መጀመሪያ መደብ ይፍጠሩ', error: true);
+    if (selectedGroupId == null) {
+      showMsg(context, 'መደብ ይምረጡ', error: true);
       return;
     }
     setState(() => saving = true);
     try {
-      await auth.api.put('/events/${jsonInt(widget.event['id'])}/participants', {
+      await context.read<AuthState>().api.put('/events/${jsonInt(widget.event['id'])}/participants', {
+        'groupId': selectedGroupId,
         'memberIds': selected.toList(),
       });
       if (mounted) {
@@ -939,7 +1007,7 @@ class _EventIssuePageState extends State<EventIssuePage> {
   }
 
   Widget _classLeaderBody(AuthState auth) {
-    if (auth.groupId == null || myGroup == null) {
+    if (allGroups.isEmpty) {
       return Scaffold(
         appBar: AppBar(title: Text(widget.event['name'] ?? '')),
         body: const EmptyBox('መጀመሪያ መደብ ይፍጠሩ · ከዚያ ተማሪዎችን ያክሉ'),
@@ -951,13 +1019,31 @@ class _EventIssuePageState extends State<EventIssuePage> {
           ? null
           : FloatingActionButton.extended(
               onPressed: saving ? null : _saveParticipants,
-              icon: saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.how_to_reg_rounded),
+              icon: saving
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.how_to_reg_rounded),
               label: const Text(S.registerParticipants),
             ),
       body: ListView(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: DropdownButtonFormField<int>(
+              value: selectedGroupId,
+              decoration: const InputDecoration(labelText: 'መደብ ይምረጡ'),
+              items: allGroups
+                  .map((g) {
+                    final id = jsonInt(g['id']);
+                    if (id == null) return null;
+                    return DropdownMenuItem(value: id, child: Text('${g['name'] ?? ''}'));
+                  })
+                  .whereType<DropdownMenuItem<int>>()
+                  .toList(),
+              onChanged: (v) => _selectGroup(v),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
             child: Text(
               '${myGroup?['name'] ?? ''} · ለበዓሉ የሚሳተፉ ተማሪዎችን ይምረጡ',
               style: const TextStyle(color: AppTheme.muted, fontWeight: FontWeight.w600),

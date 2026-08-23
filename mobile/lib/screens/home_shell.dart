@@ -218,7 +218,7 @@ class _ClassLeaderHome extends StatefulWidget {
 }
 
 class _ClassLeaderHomeState extends State<_ClassLeaderHome> {
-  Map? group;
+  List groups = [];
   int eventCount = 0;
   bool loading = true;
 
@@ -232,9 +232,8 @@ class _ClassLeaderHomeState extends State<_ClassLeaderHome> {
     try {
       final api = context.read<AuthState>().api;
       final res = await Future.wait([api.get('/groups'), api.get('/events')]);
-      final groups = (res[0] as List?) ?? [];
       setState(() {
-        group = groups.isNotEmpty ? Map<String, dynamic>.from(groups.first as Map) : null;
+        groups = (res[0] as List?) ?? [];
         eventCount = ((res[1] as List?) ?? []).length;
         loading = false;
       });
@@ -244,14 +243,16 @@ class _ClassLeaderHomeState extends State<_ClassLeaderHome> {
   }
 
   int get _studentCount {
-    if (group == null) return 0;
-    return ((group!['members'] as List?) ?? []).length;
+    var n = 0;
+    for (final g in groups) {
+      n += ((g['members'] as List?) ?? []).length;
+    }
+    return n;
   }
 
   @override
   Widget build(BuildContext context) {
     if (loading) return const LoadingView();
-    final name = group?['name']?.toString() ?? 'መደብ';
     return RefreshIndicator(
       color: AppTheme.seed,
       onRefresh: _load,
@@ -278,8 +279,8 @@ class _ClassLeaderHomeState extends State<_ClassLeaderHome> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
-                        Text(S.roleLabel('CLASS_LEADER'), style: const TextStyle(color: AppTheme.seed, fontWeight: FontWeight.w700)),
+                        Text(S.roleLabel('CLASS_LEADER'), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+                        Text('${groups.length} መደብ', style: const TextStyle(color: AppTheme.seed, fontWeight: FontWeight.w700)),
                         Text('ዛሬ · ${EthDate.now().label}', style: const TextStyle(color: AppTheme.muted, fontWeight: FontWeight.w600)),
                       ],
                     ),
@@ -314,7 +315,7 @@ class _ClassLeaderHomeState extends State<_ClassLeaderHome> {
                       '$_studentCount',
                       style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 36, color: AppTheme.seed),
                     ),
-                    const Text('ተማሪዎች በመደብዎ', style: TextStyle(color: AppTheme.muted, fontWeight: FontWeight.w700)),
+                    const Text('ተማሪዎች በሁሉም መደቦች', style: TextStyle(color: AppTheme.muted, fontWeight: FontWeight.w700)),
                   ],
                 ),
               ),
@@ -330,11 +331,14 @@ class _ClassLeaderHomeState extends State<_ClassLeaderHome> {
               trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.seed),
             ),
           ),
-          if (group == null)
-            const Padding(
-              padding: EdgeInsets.only(top: 8),
-              child: EmptyBox('መጀመሪያ መደብ ይፍጠሩ · ከዚያ ተማሪዎችን ያክሉ'),
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: FilledButton.icon(
+              onPressed: () => widget.onOpen('v-classes'),
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('መደብ ፍጠር / መደቦች'),
             ),
+          ),
         ],
       ),
     );
